@@ -1,0 +1,181 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1224;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #f5f7ff;
+}
+
+canvas {
+  display: block;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.control-surface {
+  background: rgba(12, 18, 40, 0.72);
+  backdrop-filter: blur(8px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px -20px rgba(10, 14, 40, 0.9);
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.brand-header {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  font-size: clamp(14px, 2.5vw, 20px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  text-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+}
+
+.control-bar {
+  position: absolute;
+  bottom: clamp(16px, 3vw, 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 12px);
+  padding: clamp(8px, 2vw, 12px) clamp(10px, 3vw, 16px);
+  max-width: min(96vw, 640px);
+  z-index: 12;
+}
+
+.control-bar button,
+.control-bar .slider-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: clamp(12px, 2.2vw, 13px);
+  cursor: pointer;
+  transition: transform 120ms ease, background 160ms ease, border-color 160ms ease;
+  white-space: nowrap;
+}
+
+.control-bar button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.control-bar button:active {
+  transform: scale(0.98);
+}
+
+.control-bar button.active {
+  background: rgba(96, 140, 255, 0.28);
+  border-color: rgba(120, 156, 255, 0.6);
+}
+
+.control-bar label {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 2vw, 8px);
+}
+
+.control-bar input[type='range'] {
+  width: clamp(60px, 18vw, 120px);
+}
+
+.science-panel {
+  position: absolute;
+  top: clamp(64px, 12vw, 96px);
+  right: clamp(12px, 4vw, 24px);
+  max-width: min(92vw, 320px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(70vh, 420px);
+  overflow: auto;
+  z-index: 11;
+}
+
+.science-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.science-panel h2 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.science-panel p {
+  margin: 0;
+  font-size: clamp(12px, 2.2vw, 13px);
+  line-height: 1.6;
+  color: rgba(245, 247, 255, 0.88);
+}
+
+.science-panel .hint {
+  color: rgba(245, 247, 255, 0.6);
+}
+
+.btn-ghost {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: clamp(12px, 2.2vw, 12px);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.disclaimer {
+  position: absolute;
+  bottom: clamp(8px, 2vw, 12px);
+  left: clamp(12px, 4vw, 24px);
+  padding: 6px 10px;
+  font-size: clamp(10px, 2vw, 11px);
+  color: rgba(245, 247, 255, 0.72);
+  max-width: min(70vw, 320px);
+  line-height: 1.4;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.45);
+  z-index: 11;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .brand-header {
+    top: 10px;
+  }
+
+  .science-panel {
+    top: clamp(56px, 14vw, 80px);
+    right: clamp(8px, 4vw, 16px);
+  }
+
+  .control-bar {
+    bottom: clamp(10px, 4vw, 16px);
+  }
+}
+
