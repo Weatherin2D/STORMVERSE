@@ -19,10 +19,11 @@ export function Canvas({ paused, params, demoFlashToken }: CanvasProps) {
   const timeRef = useRef(0)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    const container = containerRef.current
+    if (!container) return
 
-    const width = containerRef.current.clientWidth
-    const height = containerRef.current.clientHeight
+    const width = container.clientWidth
+    const height = container.clientHeight
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -35,7 +36,7 @@ export function Canvas({ paused, params, demoFlashToken }: CanvasProps) {
     renderer.toneMappingExposure = 1.15
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.setClearColor(0x0b1224)
-    containerRef.current.appendChild(renderer.domElement)
+    container.appendChild(renderer.domElement)
 
     const camera = new THREE.PerspectiveCamera(55, width / height, 1, 2000)
     camera.position.set(320, 420, 680)
@@ -86,8 +87,8 @@ export function Canvas({ paused, params, demoFlashToken }: CanvasProps) {
       controlsRef.current?.dispose()
       sceneRef.current?.dispose()
       renderer.dispose()
-      if (renderer.domElement.parentNode === containerRef.current) {
-        containerRef.current.removeChild(renderer.domElement)
+      if (renderer.domElement.parentNode === container) {
+        container.removeChild(renderer.domElement)
       }
       sceneRef.current = null
       controlsRef.current = null

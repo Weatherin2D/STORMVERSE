@@ -51,7 +51,7 @@ export function UIOverlay({
               <p className="hint">Lightning flashes illuminate the interior briefly and add atmosphere.</p>
             </>
           )}
-          <button className="btn-ghost" onClick={() => setExpanded((v) => !v)}>
+          <button className="btn-ghost" onClick={() => setExpanded((v: boolean) => !v)}>
             {expanded ? 'Show less' : 'Show more'}
           </button>
         </aside>
@@ -68,7 +68,7 @@ export function UIOverlay({
       )}
 
       <div className="control-surface control-bar">
-        <button onClick={() => setPaused((p) => !p)} className={paused ? 'active' : ''}>
+        <button onClick={() => setPaused(!paused)} className={paused ? 'active' : ''}>
           {paused ? 'Play' : 'Pause'}
         </button>
         <button onClick={resetCamera}>Reset Camera</button>

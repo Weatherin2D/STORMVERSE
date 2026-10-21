@@ -13,13 +13,11 @@ export class VolumetricClouds {
   group = new THREE.Group()
   private puffs: Puff[] = []
   private material: THREE.ShaderMaterial
-  private lowPower: boolean
   private time = 0
   private drift = 0.24
   private detail = 0.7
 
   constructor(lowPower: boolean) {
-    this.lowPower = lowPower
     const count = lowPower ? 22 : 38
     const puffGeo = new THREE.IcosahedronGeometry(1, lowPower ? 1 : 2)
 
@@ -35,39 +33,39 @@ export class VolumetricClouds {
         uOpacity: { value: 0.9 },
         uDetail: { value: 0.7 },
       },
-      vertexShader: /* glsl */ 
-        varying vec3 vNormal;
-        varying vec3 vPos;
-        uniform float uTime;
-        uniform float uDetail;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec3 pos = position;
-          float wave = sin(uTime * 0.12 + position.y * 0.01) * (0.08 + uDetail * 0.12);
-          pos += normal * wave;
-          vPos = (modelMatrix * vec4(pos, 1.0)).xyz;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-        }
-      ,
-      fragmentShader: /* glsl */ 
-        varying vec3 vNormal;
-        varying vec3 vPos;
-        uniform vec3 uLight;
-        uniform vec3 uCore;
-        uniform vec3 uHighlight;
-        uniform float uOpacity;
-        uniform float uDetail;
-        void main() {
-          vec3 viewDir = normalize(cameraPosition - vPos);
-          float fresnel = pow(1.0 - max(0.0, dot(viewDir, vNormal)), 2.2);
-          float shade = smoothstep(-0.2, 1.0, dot(vNormal, normalize(uLight)));
-          vec3 col = mix(uCore, uHighlight, shade + fresnel * 0.6);
-          float edge = smoothstep(0.0, 0.8, fresnel + (1.0 - shade) * 0.4);
-          col = mix(col, uHighlight * 1.2, edge * uDetail);
-          float alpha = (0.16 + fresnel * 0.42 + edge * 0.28) * uOpacity;
-          gl_FragColor = vec4(col, alpha);
-        }
-      ,
+      vertexShader: [
+        'varying vec3 vNormal;',
+        'varying vec3 vPos;',
+        'uniform float uTime;',
+        'uniform float uDetail;',
+        'void main() {',
+        '  vNormal = normalize(normalMatrix * normal);',
+        '  vec3 pos = position;',
+        '  float wave = sin(uTime * 0.12 + position.y * 0.01) * (0.08 + uDetail * 0.12);',
+        '  pos += normal * wave;',
+        '  vPos = (modelMatrix * vec4(pos, 1.0)).xyz;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);',
+        '}',
+      ].join('\n'),
+      fragmentShader: [
+        'varying vec3 vNormal;',
+        'varying vec3 vPos;',
+        'uniform vec3 uLight;',
+        'uniform vec3 uCore;',
+        'uniform vec3 uHighlight;',
+        'uniform float uOpacity;',
+        'uniform float uDetail;',
+        'void main() {',
+        '  vec3 viewDir = normalize(cameraPosition - vPos);',
+        '  float fresnel = pow(1.0 - max(0.0, dot(viewDir, vNormal)), 2.2);',
+        '  float shade = smoothstep(-0.2, 1.0, dot(vNormal, normalize(uLight)));',
+        '  vec3 col = mix(uCore, uHighlight, shade + fresnel * 0.6);',
+        '  float edge = smoothstep(0.0, 0.8, fresnel + (1.0 - shade) * 0.4);',
+        '  col = mix(col, uHighlight * 1.2, edge * uDetail);',
+        '  float alpha = (0.16 + fresnel * 0.42 + edge * 0.28) * uOpacity;',
+        '  gl_FragColor = vec4(col, alpha);',
+        '}',
+      ].join('\n'),
     })
 
     const towerHeights = [280, 340, 420, 500]
@@ -95,7 +93,6 @@ export class VolumetricClouds {
       this.group.add(mesh)
     }
 
-    // anvil
     for (let i = 0; i < (lowPower ? 10 : 16); i++) {
       const ang = (i / (lowPower ? 10 : 16)) * Math.PI * 2
       const r = 90 + Math.random() * 110
@@ -117,8 +114,7 @@ export class VolumetricClouds {
       this.group.add(mesh)
     }
 
-    // core
-    for (let i = 0; i < (lowPower ? 6 : 10); i) {
+    for (let i = 0; i < (lowPower ? 6 : 10); i++) {
       const x = (Math.random() - 0.5) * 60
       const z = (Math.random() - 0.5) * 60
       const y = 220 + Math.random() * 160
@@ -186,4 +182,3 @@ export class VolumetricClouds {
     this.group.clear()
   }
 }
-

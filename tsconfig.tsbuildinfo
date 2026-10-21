@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/core/canvas.tsx","./src/core/types.ts","./src/render/ground.ts","./src/render/lightningflash.ts","./src/render/supercellcontrols.ts","./src/render/supercellscene.ts","./src/render/volumetricclouds.ts","./src/ui/uioverlay.tsx","./src/utils/perf.ts"],"version":"5.9.3"}

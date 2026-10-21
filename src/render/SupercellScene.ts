@@ -1,4 +1,4 @@
-import * as THREE from 'three'
+﻿import * as THREE from 'three'
 import { VolumetricClouds } from './VolumetricClouds'
 import { LightningFlash } from './LightningFlash'
 import { Ground } from './Ground'
@@ -13,17 +13,10 @@ export class SupercellScene {
   private hemi = new THREE.HemisphereLight(0x9db4ff, 0x05070f, 0.24)
   private dir = new THREE.DirectionalLight(0x7f9bff, 0.22)
   private stormLight = new THREE.PointLight(0xb9d4ff, 0, 1600)
-  private params: SimParams = {
-    cloudDetail: 0.7,
-    windDrift: 0.24,
-    flashFreq: 0.18,
-  }
-  private lowPower: boolean
   private flashTimer = 0
   private flashInterval = 4.2
 
   constructor(lowPower: boolean) {
-    this.lowPower = lowPower
     this.scene.fog = new THREE.FogExp2(0x050810, 0.00022)
     this.dir.position.set(420, 560, 320)
     this.dir.castShadow = false
@@ -40,7 +33,7 @@ export class SupercellScene {
   }
 
   setParams(p: SimParams) {
-    this.params = p
+    void p
     this.clouds.setParams(p)
     this.flashInterval = THREE.MathUtils.lerp(6.6, 2.6, p.flashFreq)
   }
@@ -74,4 +67,3 @@ export class SupercellScene {
     this.lightning.dispose()
   }
 }
-

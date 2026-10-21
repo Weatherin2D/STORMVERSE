@@ -1,8 +1,7 @@
-import * as THREE from 'three'
+﻿import * as THREE from 'three'
 
 export class LightningFlash {
   private scene: THREE.Scene
-  private light: THREE.PointLight
   private flashLight = new THREE.PointLight(0xdce7ff, 0, 2200)
   private bolts: THREE.Line[] = []
   private active = false
@@ -10,9 +9,8 @@ export class LightningFlash {
   private duration = 0.16
   private intensity = 0
 
-  constructor(scene: THREE.Scene, stormLight: THREE.PointLight) {
+  constructor(scene: THREE.Scene, _stormLight: THREE.PointLight) {
     this.scene = scene
-    this.light = stormLight
     this.flashLight.position.set(40, 620, -20)
     this.scene.add(this.flashLight)
   }
@@ -97,4 +95,3 @@ export class LightningFlash {
     this.bolts = []
   }
 }
-
