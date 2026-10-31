@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PROTOTYPE_STORM } from '../config/app'
 import { RAINVIEWER } from '../config/weather'
 import {
   australianWeatherProvider,
+  createLightningProviderFromEnv,
   fetchOpenMeteoEnvironment,
+  type LightningObservation,
   type RadarObservation,
   type SatelliteObservation,
   type StormTrack,
@@ -21,10 +23,13 @@ export interface LiveWeatherState {
   satelliteFrames: SatelliteObservation[]
   environment: EnvironmentalProfile | null
   tracks: StormTrack[]
+  lightningEvents: LightningObservation[]
+  lightningConfigured: boolean
   refresh: () => void
 }
 
 export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
+  const lightningProvider = useMemo(() => createLightningProviderFromEnv(), [])
   const [loading, setLoading] = useState(true)
   const [tracksLoading, setTracksLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +38,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [satelliteFrames, setSatelliteFrames] = useState<SatelliteObservation[]>([])
   const [environment, setEnvironment] = useState<EnvironmentalProfile | null>(null)
   const [tracks, setTracks] = useState<StormTrack[]>([])
+  const [lightningEvents, setLightningEvents] = useState<LightningObservation[]>([])
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     ;(async () => {
       setLoading(true)
       try {
-        const [avail, radar, satellite, env] = await Promise.all([
+        const [avail, radar, satellite, env, lghtMeta, lghtEvents] = await Promise.all([
           australianWeatherProvider.getAvailability(),
           australianWeatherProvider.getRadar({}),
           australianWeatherProvider.getSatellite({}),
@@ -51,13 +57,16 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
             PROTOTYPE_STORM.longitude,
             controller.signal,
           ),
+          lightningProvider.getAvailability(),
+          lightningProvider.getLightning({}, controller.signal).catch(() => [] as LightningObservation[]),
         ])
         if (cancelled) return
         const radarOk = radar.filter((f) => f.available && f.tileUrlTemplate)
-        setAvailability(avail)
+        setAvailability([...avail.filter((a) => a.productType !== 'lightning_event'), lghtMeta])
         setRadarFrames(radarOk)
         setSatelliteFrames(satellite.filter((f) => f.available && f.tileUrlTemplate))
         setEnvironment(env)
+        setLightningEvents(lghtEvents)
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -71,7 +80,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       cancelled = true
       controller.abort()
     }
-  }, [tick])
+  }, [tick, lightningProvider])
 
   useEffect(() => {
     if (!enableTracks) {
@@ -158,6 +167,8 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     satelliteFrames,
     environment,
     tracks,
+    lightningEvents,
+    lightningConfigured: lightningProvider.configured(),
     refresh: () => setTick((n) => n + 1),
   }
 }

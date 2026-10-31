@@ -15,6 +15,8 @@ export interface LayerState {
   satellite: boolean
   /** Derived storm-cell tracks from radar mosaics. */
   tracks: boolean
+  /** Configured lightning GeoJSON events on the globe. */
+  lightningObs: boolean
 }
 
 export interface TimelineState {
@@ -54,6 +56,7 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       radar: true,
       satellite: false,
       tracks: true,
+      lightningObs: true,
     },
     cloudParams: { ...CLOUD_DEFAULTS },
     flashFreq: 0.35,

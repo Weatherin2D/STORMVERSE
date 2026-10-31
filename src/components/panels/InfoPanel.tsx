@@ -2,6 +2,7 @@ import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { StormTrack, WeatherObservationMeta } from '../../weather'
 import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapter'
+import type { ReconstructionTarget } from '../../weather'
 import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
 
@@ -12,12 +13,16 @@ interface InfoPanelProps {
   environment: EnvironmentalProfile | null
   tracks: StormTrack[]
   selectedTrackId: string | null
+  reconstruction: ReconstructionTarget | null
   radarLabel: string | null
   tracksLoading: boolean
+  lightningConfigured: boolean
+  lightningCount: number
   loading: boolean
   error: string | null
   onClose: () => void
   onEnterStorm: () => void
+  onEnterSelectedCell: () => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
 }
@@ -29,12 +34,16 @@ export function InfoPanel({
   environment,
   tracks,
   selectedTrackId,
+  reconstruction,
   radarLabel,
   tracksLoading,
+  lightningConfigured,
+  lightningCount,
   loading,
   error,
   onClose,
   onEnterStorm,
+  onEnterSelectedCell,
   onReturnGlobe,
   onSelectTrack,
 }: InfoPanelProps) {
@@ -46,7 +55,11 @@ export function InfoPanel({
       <header>
         <div>
           <p className="eyebrow">{APP_NAME}</p>
-          <h2>{viewMode === 'storm' ? PROTOTYPE_STORM.name : 'Earth exploration'}</h2>
+          <h2>
+            {viewMode === 'storm'
+              ? reconstruction?.label ?? PROTOTYPE_STORM.name
+              : 'Earth exploration'}
+          </h2>
         </div>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close panel">
           Close
@@ -56,9 +69,9 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Live RainViewer mosaics plus heuristic cell tracks derived in-browser from those
-            tiles. Tracks are low-confidence estimates — not official storm-cell products. The
-            prototype marker still opens a synthetic 3D reconstruction.
+            Select a derived cell track, then <strong>Reconstruct cell</strong> to open a procedural
+            3D storm shaped by that cell’s confidence and Open-Meteo CAPE. Lightning appears on the
+            globe only when a GeoJSON feed is configured.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
@@ -77,6 +90,15 @@ export function InfoPanel({
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="availability">
+            <h3>Lightning feed</h3>
+            <p className="provenance">
+              {lightningConfigured
+                ? `${lightningCount} event(s) loaded from VITE_LIGHTNING_GEOJSON_URL.`
+                : 'Not configured. Point VITE_LIGHTNING_GEOJSON_URL at a licensed FeatureCollection (see public/samples/lightning.example.geojson).'}
+            </p>
           </div>
 
           <div className="availability">
@@ -105,25 +127,51 @@ export function InfoPanel({
                 ))}
               </ul>
             )}
-            <p className="provenance">
-              <strong>Provenance:</strong> derived from RainViewer mosaic colour samples with
-              nearest-neighbour linking.
-            </p>
           </div>
+
+          {reconstruction && selected && (
+            <div className="availability">
+              <h3>Reconstruction preview</h3>
+              <dl className="meta-grid">
+                <div>
+                  <dt>CAPE driver</dt>
+                  <dd>
+                    {reconstruction.drivers.capeJkg != null
+                      ? `${Math.round(reconstruction.drivers.capeJkg)} J/kg`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Cell conf.</dt>
+                  <dd>
+                    {reconstruction.drivers.cellConfidence != null
+                      ? `${Math.round(reconstruction.drivers.cellConfidence * 100)}%`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Density</dt>
+                  <dd>{reconstruction.cloudParams.density.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt>Anvil</dt>
+                  <dd>{reconstruction.cloudParams.anvilExtent.toFixed(2)}</dd>
+                </div>
+              </dl>
+              <p className="provenance">
+                <strong>Provenance:</strong> {reconstruction.provenance.summary}
+              </p>
+              <button type="button" className="primary" onClick={onEnterSelectedCell}>
+                Reconstruct selected cell
+              </button>
+            </div>
+          )}
 
           {environment && (
             <div className="availability">
               <h3>Environment at prototype site</h3>
               {environment.available ? (
                 <dl className="meta-grid">
-                  <div>
-                    <dt>Temperature</dt>
-                    <dd>{environment.temperatureC?.toFixed(1) ?? '—'} °C</dd>
-                  </div>
-                  <div>
-                    <dt>Humidity</dt>
-                    <dd>{environment.relativeHumidityPct ?? '—'}%</dd>
-                  </div>
                   <div>
                     <dt>CAPE</dt>
                     <dd>
@@ -136,13 +184,18 @@ export function InfoPanel({
                       {environment.cinJkg != null ? `${Math.round(environment.cinJkg)} J/kg` : '—'}
                     </dd>
                   </div>
+                  <div>
+                    <dt>Temperature</dt>
+                    <dd>{environment.temperatureC?.toFixed(1) ?? '—'} °C</dd>
+                  </div>
+                  <div>
+                    <dt>Humidity</dt>
+                    <dd>{environment.relativeHumidityPct ?? '—'}%</dd>
+                  </div>
                 </dl>
               ) : (
                 <p className="provenance">Environmental model context unavailable.</p>
               )}
-              <p className="provenance">
-                <strong>Provenance:</strong> {environment.provenance.summary}
-              </p>
             </div>
           )}
 
@@ -153,40 +206,44 @@ export function InfoPanel({
           />
 
           <p className="provenance">
-            <strong>Provider:</strong> {australianWeatherProvider.displayName}. Detected lightning
-            remains unavailable from this feed.
+            <strong>Provider:</strong> {australianWeatherProvider.displayName}
           </p>
-          <button type="button" className="primary" onClick={onEnterStorm}>
-            Approach prototype storm
+          <button type="button" onClick={onEnterStorm}>
+            Enter prototype storm
           </button>
         </div>
       ) : (
         <div className="panel-body">
-          <p>{PROTOTYPE_STORM.description}</p>
+          <p>
+            {reconstruction?.provenance.summary ?? PROTOTYPE_STORM.description}
+          </p>
           <dl className="meta-grid">
             <div>
-              <dt>Location</dt>
+              <dt>Focus</dt>
               <dd>
-                {PROTOTYPE_STORM.latitude.toFixed(2)}°, {PROTOTYPE_STORM.longitude.toFixed(2)}°
+                {(reconstruction?.latitude ?? PROTOTYPE_STORM.latitude).toFixed(2)}°,{' '}
+                {(reconstruction?.longitude ?? PROTOTYPE_STORM.longitude).toFixed(2)}°
               </dd>
             </div>
             <div>
               <dt>Provenance</dt>
-              <dd>Synthetic / procedural reconstruction</dd>
+              <dd>{reconstruction?.provenance.kind ?? 'synthetic'} reconstruction</dd>
             </div>
             <div>
-              <dt>Lightning</dt>
-              <dd>Synthetic demonstration events</dd>
+              <dt>Lightning FX</dt>
+              <dd>Synthetic demonstration in 3D scene</dd>
             </div>
             <div>
-              <dt>Precipitation</dt>
-              <dd>Visual shafts only — not measured rainfall</dd>
+              <dt>Globe lightning</dt>
+              <dd>
+                {lightningConfigured ? `${lightningCount} feed events` : 'Feed not configured'}
+              </dd>
             </div>
           </dl>
           <CrossSection
             environment={environment}
             selectedTrack={selected}
-            radarIntensityHint={0.55}
+            radarIntensityHint={reconstruction?.drivers.cellConfidence ?? 0.55}
           />
           <button type="button" onClick={onReturnGlobe}>
             Return to Earth

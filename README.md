@@ -16,51 +16,63 @@ npm run build
 npm run preview
 ```
 
-Optional Cesium Ion token: copy `.env.example` → `.env` and set `VITE_CESIUM_ION_TOKEN`.
+### Environment
+
+Copy `.env.example` → `.env`:
+
+```bash
+VITE_CESIUM_ION_TOKEN=           # optional Cesium imagery/terrain
+VITE_LIGHTNING_GEOJSON_URL=      # optional licensed lightning FeatureCollection
+```
+
+Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).
 
 ## Milestone status
 
-### Milestone 1 — Visual prototype
-Interactive Cesium Earth, ray-marched synthetic thunderstorm, lighting, lightning FX, timeline, typed weather interfaces.
+### 1 — Visual prototype
+Cesium Earth, ray-marched synthetic thunderstorm, lighting, FX, typed weather interfaces.
 
-### Milestone 2 — Live observation overlays
-RainViewer radar mosaics on the globe, observation-time timeline, optional IR satellite, Open-Meteo site context. 3D storm remains synthetic.
+### 2 — Live observation overlays
+RainViewer radar mosaics, observation timeline, optional IR, Open-Meteo site context.
 
-### Milestone 3 — Derived tracks + scientific context (current)
-- **Heuristic cell tracks** derived in-browser from RainViewer Australia tiles (colour sampling + nearest-neighbour linking)
-- Tracks drawn on the globe with confidence labels; selectable in the info panel
-- **CAPE / CIN** from Open-Meteo hourly model fields
-- **Schematic vertical cross-section** shaped by model CAPE/CIN and selected track confidence — clearly labelled as reconstruction, not radar RHI
-- Provenance updated for derived vs processed vs model vs synthetic products
+### 3 — Derived tracks + science context
+Heuristic cell tracks from mosaics, CAPE/CIN, schematic cross-section with provenance.
+
+### 4 — Cell reconstruction bridge + lightning feed (current)
+- **Reconstruct cell** — selected derived track + Open-Meteo CAPE map into procedural cloud parameters (labelled procedural, not measured volume)
+- Fly-to selected cell before opening the 3D scene
+- Reconstruction preview (density / anvil / drivers) in the info panel
+- **Pluggable lightning GeoJSON feed** via `VITE_LIGHTNING_GEOJSON_URL` (points on globe; unused → unavailable)
+- Storm-view flashes prefer feed events when reconstructing a cell with a configured feed
 
 ## Scientific integrity
 
 | Visual | Interpretation |
 | --- | --- |
-| Globe radar mosaic | Processed composite imagery via RainViewer |
-| Cell tracks | **Derived** heuristic from mosaic colours — low confidence |
-| CAPE / CIN / site weather | Numerical model (Open-Meteo) |
-| Cross-section diagram | Schematic reconstruction aid |
-| 3D clouds / bolts / shafts | Synthetic demonstration |
-| Prototype storm marker | Demonstration target |
+| Radar mosaic | Processed RainViewer imagery |
+| Cell tracks | Derived heuristic (low confidence) |
+| CAPE / CIN | Model (Open-Meteo) |
+| Cross-section | Schematic reconstruction aid |
+| 3D cloud after “Reconstruct cell” | **Procedural**, informed by derived + model drivers |
+| Globe lightning | Direct only if you supply a licensed GeoJSON feed |
+| Prototype storm / demo bolts | Synthetic |
 
 ## Known limitations
 
-- No licensed lightning network; no official BoM cell product
-- Tracks can be empty when mosaics show little precip over Australia
-- Colour-based intensity is not calibrated dBZ
-- Cross-section is not a measured vertical radar slice
-- 3D storm is not georegistered to a derived cell
+- No bundled live lightning network (configure your own licensed URL)
+- Reconstruction mapping is heuristic visualisation, not a scientific retrieval
+- Tracks empty when Australia mosaics lack precip
+- 3D scene is still a local Three.js environment (not Cesium-georegistered volume)
 
-## Next milestone ideas
+## Next ideas
 
-1. Licensed Australian lightning events on globe + storm illumination
-2. Optional licensed radar volume / RHI products
-3. Improve cell tracking (multi-scale, optical flow) with documented skill scores
-4. Drive 3D reconstruction parameters from a selected derived cell when justified
+1. Licensed commercial/BoM lightning with quality metadata
+2. Radar volume / RHI products under proper licensing
+3. Skill scores for cell tracking
+4. True georegistered storm volume on the globe
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
 ## Stack
 
-Vite · React · TypeScript · CesiumJS · Three.js · RainViewer · Open-Meteo
+Vite · React · TypeScript · CesiumJS · Three.js · RainViewer · Open-Meteo · optional GeoJSON lightning

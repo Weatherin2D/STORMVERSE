@@ -1,0 +1,27 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.1, -32.4, 5000] },
+      "properties": {
+        "id": "example-lght-1",
+        "observedAt": "2024-11-15T06:10:00.000Z",
+        "classification": "intra_cloud",
+        "source": "example-not-live",
+        "note": "Example only — replace with a licensed feed via VITE_LIGHTNING_GEOJSON_URL"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.18, -32.52, 3500] },
+      "properties": {
+        "id": "example-lght-2",
+        "observedAt": "2024-11-15T06:12:30.000Z",
+        "classification": "cloud_to_ground",
+        "peakCurrentKa": -24,
+        "source": "example-not-live"
+      }
+    }
+  ]
+}

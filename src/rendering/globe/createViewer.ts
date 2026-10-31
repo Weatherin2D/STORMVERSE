@@ -20,6 +20,7 @@ import {
 } from 'cesium'
 import { PROTOTYPE_STORM } from '../../config/app'
 import type {
+  LightningObservation,
   RadarObservation,
   SatelliteObservation,
   StormTrack,
@@ -42,6 +43,8 @@ export interface StormverseGlobe {
   setSatelliteVisible: (visible: boolean) => void
   setTracks: (tracks: StormTrack[], selectedId?: string | null) => void
   setTracksVisible: (visible: boolean) => void
+  setLightningEvents: (events: LightningObservation[]) => void
+  setLightningVisible: (visible: boolean) => void
   destroy: () => void
 }
 
@@ -330,6 +333,58 @@ export async function createStormverseGlobe(
     viewer.scene.requestRender()
   }
 
+  const lightningEntityIds = new Set<string>()
+  let lightningVisible = true
+  let cachedLightning: LightningObservation[] = []
+
+  const clearLightning = () => {
+    for (const id of lightningEntityIds) viewer.entities.removeById(id)
+    lightningEntityIds.clear()
+  }
+
+  const setLightningEvents = (events: LightningObservation[]) => {
+    cachedLightning = events
+    clearLightning()
+    if (!lightningVisible) return
+    for (const ev of events.slice(0, 400)) {
+      const id = `lght-${ev.id}`
+      viewer.entities.add({
+        id,
+        position: Cartesian3.fromDegrees(ev.longitude, ev.latitude, ev.altitudeM ?? 6000),
+        point: {
+          pixelSize: 5,
+          color: Color.fromCssColorString('#f5e6a6').withAlpha(0.9),
+          outlineColor: Color.fromCssColorString('#fff8d0').withAlpha(0.5),
+          outlineWidth: 1,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      })
+      lightningEntityIds.add(id)
+    }
+    viewer.scene.requestRender()
+  }
+
+  const setLightningVisible = (visible: boolean) => {
+    lightningVisible = visible
+    if (!visible) {
+      for (const id of lightningEntityIds) {
+        const ent = viewer.entities.getById(id)
+        if (ent) ent.show = false
+      }
+      viewer.scene.requestRender()
+      return
+    }
+    if (lightningEntityIds.size === 0 && cachedLightning.length > 0) {
+      setLightningEvents(cachedLightning)
+      return
+    }
+    for (const id of lightningEntityIds) {
+      const ent = viewer.entities.getById(id)
+      if (ent) ent.show = true
+    }
+    viewer.scene.requestRender()
+  }
+
   const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
   handler.setInputAction((movement: { position: Cartesian2 }) => {
     const picked = viewer.scene.pick(movement.position)
@@ -414,8 +469,11 @@ export async function createStormverseGlobe(
     setSatelliteVisible,
     setTracks,
     setTracksVisible,
+    setLightningEvents,
+    setLightningVisible,
     destroy: () => {
       clearTracks()
+      clearLightning()
       handler.destroy()
       if (!viewer.isDestroyed()) viewer.destroy()
     },

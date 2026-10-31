@@ -12,6 +12,8 @@ interface ExplorationControlsProps {
   cloudParams: CloudParams
   satelliteAvailable: boolean
   tracksLoading: boolean
+  lightningConfigured: boolean
+  lightningCount: number
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -19,10 +21,12 @@ interface ExplorationControlsProps {
   onToggleDebug: () => void
   onCloudParams: (p: Partial<CloudParams>) => void
   onEnterStorm: () => void
+  onEnterSelectedCell: () => void
   onReturnGlobe: () => void
   onTogglePanel: () => void
   onDemoLightning: () => void
   onRefreshWeather: () => void
+  hasSelectedTrack: boolean
 }
 
 const PRESETS: { id: StormCameraPreset; label: string }[] = [
@@ -42,6 +46,8 @@ export function ExplorationControls({
   cloudParams,
   satelliteAvailable,
   tracksLoading,
+  lightningConfigured,
+  lightningCount,
   onLightingMode,
   onLayers,
   onPreset,
@@ -49,18 +55,31 @@ export function ExplorationControls({
   onToggleDebug,
   onCloudParams,
   onEnterStorm,
+  onEnterSelectedCell,
   onReturnGlobe,
   onTogglePanel,
   onDemoLightning,
   onRefreshWeather,
+  hasSelectedTrack,
 }: ExplorationControlsProps) {
   return (
     <div className="exploration-controls">
-      <div className="control-cluster">
+      <div className="control-cluster wrap">
         {viewMode === 'globe' ? (
-          <button type="button" className="primary" onClick={onEnterStorm}>
-            Enter storm
-          </button>
+          <>
+            <button type="button" className="primary" onClick={onEnterStorm}>
+              Enter prototype
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!hasSelectedTrack}
+              title="Open 3D reconstruction informed by the selected derived cell + CAPE"
+              onClick={onEnterSelectedCell}
+            >
+              Reconstruct cell
+            </button>
+          </>
         ) : (
           <button type="button" onClick={onReturnGlobe}>
             Earth view
@@ -100,6 +119,19 @@ export function ExplorationControls({
             onClick={() => onLayers({ tracks: !layers.tracks })}
           >
             {tracksLoading ? 'Tracks…' : 'Cell tracks'}
+          </button>
+          <button
+            type="button"
+            className={layers.lightningObs ? 'active' : ''}
+            disabled={!lightningConfigured}
+            title={
+              lightningConfigured
+                ? `Toggle lightning feed (${lightningCount} events)`
+                : 'Set VITE_LIGHTNING_GEOJSON_URL to enable'
+            }
+            onClick={() => onLayers({ lightningObs: !layers.lightningObs })}
+          >
+            Lightning
           </button>
           <button type="button" onClick={onRefreshWeather}>
             Refresh data

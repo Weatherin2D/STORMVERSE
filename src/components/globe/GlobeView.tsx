@@ -3,12 +3,18 @@ import {
   createStormverseGlobe,
   type StormverseGlobe,
 } from '../../rendering/globe/createViewer'
-import type { RadarObservation, SatelliteObservation, StormTrack } from '../../weather'
+import type {
+  LightningObservation,
+  RadarObservation,
+  SatelliteObservation,
+  StormTrack,
+} from '../../weather'
 
 interface GlobeViewProps {
   active: boolean
   requestFlyToStorm: number
   requestFlyHome: number
+  flyTarget: { lon: number; lat: number; height: number; token: number } | null
   onEnterStorm: () => void
   onTrackSelect: (trackId: string) => void
   radarFrame: RadarObservation | null
@@ -18,11 +24,14 @@ interface GlobeViewProps {
   tracks: StormTrack[]
   tracksVisible: boolean
   selectedTrackId: string | null
+  lightningEvents: LightningObservation[]
+  lightningVisible: boolean
 }
 
 export function GlobeView({
   requestFlyToStorm,
   requestFlyHome,
+  flyTarget,
   onEnterStorm,
   onTrackSelect,
   radarFrame,
@@ -32,6 +41,8 @@ export function GlobeView({
   tracks,
   tracksVisible,
   selectedTrackId,
+  lightningEvents,
+  lightningVisible,
 }: GlobeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<StormverseGlobe | null>(null)
@@ -58,9 +69,11 @@ export function GlobeView({
         globe.setRadarVisible(radarVisible)
         globe.setSatelliteVisible(satelliteVisible)
         globe.setTracksVisible(tracksVisible)
+        globe.setLightningVisible(lightningVisible)
         if (radarFrame) globe.setRadarFrame(radarFrame)
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
         globe.setTracks(tracks, selectedTrackId)
+        globe.setLightningEvents(lightningEvents)
       })
       .catch((err) => {
         console.error('Failed to initialise Cesium globe', err)
@@ -85,6 +98,11 @@ export function GlobeView({
   }, [requestFlyHome])
 
   useEffect(() => {
+    if (!flyTarget || flyTarget.token === 0) return
+    globeRef.current?.flyToCoords(flyTarget.lon, flyTarget.lat, flyTarget.height)
+  }, [flyTarget])
+
+  useEffect(() => {
     globeRef.current?.setRadarFrame(radarFrame)
   }, [radarFrame])
 
@@ -107,6 +125,14 @@ export function GlobeView({
   useEffect(() => {
     globeRef.current?.setTracksVisible(tracksVisible)
   }, [tracksVisible])
+
+  useEffect(() => {
+    globeRef.current?.setLightningEvents(lightningEvents)
+  }, [lightningEvents])
+
+  useEffect(() => {
+    globeRef.current?.setLightningVisible(lightningVisible)
+  }, [lightningVisible])
 
   return <div ref={containerRef} className="viewport-layer globe-layer" />
 }

@@ -11,8 +11,12 @@ import { useLiveWeather } from './hooks/useLiveWeather'
 import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
-import { prototypeProvider, type LightningObservation } from './weather'
-import { PROTOTYPE_STORM, TIMELINE } from './config/app'
+import {
+  mapEnvironmentToReconstruction,
+  prototypeProvider,
+  type LightningObservation,
+} from './weather'
+import { TIMELINE } from './config/app'
 
 export default function App() {
   const reducedMotion = usePrefersReducedMotion()
@@ -20,11 +24,18 @@ export default function App() {
   const live = useLiveWeather(state.layers.tracks)
   const [flyStormToken, setFlyStormToken] = useState(0)
   const [flyHomeToken, setFlyHomeToken] = useState(0)
+  const [flyTarget, setFlyTarget] = useState<{
+    lon: number
+    lat: number
+    height: number
+    token: number
+  } | null>(null)
   const [presetToken, setPresetToken] = useState(0)
   const [lightningToken, setLightningToken] = useState(0)
   const [lightningEvent, setLightningEvent] = useState<LightningObservation | null>(null)
   const [syntheticLightning, setSyntheticLightning] = useState<LightningObservation[]>([])
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
+  const [reconMode, setReconMode] = useState<'prototype' | 'cell'>('prototype')
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -50,6 +61,21 @@ export default function App() {
     )
   }, [live.tracks])
 
+  const selectedTrack = useMemo(
+    () => live.tracks.find((t) => t.id === selectedTrackId) ?? null,
+    [live.tracks, selectedTrackId],
+  )
+
+  const reconstruction = useMemo(
+    () => mapEnvironmentToReconstruction(live.environment, reconMode === 'cell' ? selectedTrack : null),
+    [live.environment, reconMode, selectedTrack],
+  )
+
+  const previewReconstruction = useMemo(
+    () => mapEnvironmentToReconstruction(live.environment, selectedTrack),
+    [live.environment, selectedTrack],
+  )
+
   useEffect(() => {
     if (live.radarFrames.length === 0) return
     setState((s) => {
@@ -61,6 +87,10 @@ export default function App() {
           : live.tracksLoading
             ? ' · deriving tracks…'
             : ''
+      const lghtNote =
+        live.lightningConfigured && live.lightningEvents.length > 0
+          ? ` · ${live.lightningEvents.length} lightning`
+          : ''
       return {
         ...s,
         timeline: {
@@ -71,10 +101,18 @@ export default function App() {
         },
         statusMessage: live.error
           ? `Radar feed error: ${live.error}`
-          : `Live radar · ${live.radarFrames.length} frames${trackNote}`,
+          : `Live radar · ${live.radarFrames.length} frames${trackNote}${lghtNote}`,
       }
     })
-  }, [live.radarFrames, live.error, live.tracks, live.tracksLoading, state.layers.tracks])
+  }, [
+    live.radarFrames,
+    live.error,
+    live.tracks,
+    live.tracksLoading,
+    live.lightningConfigured,
+    live.lightningEvents.length,
+    state.layers.tracks,
+  ])
 
   useEffect(() => {
     if (!state.timeline.playing) return
@@ -122,9 +160,24 @@ export default function App() {
         ? live.satelliteFrames[live.satelliteFrames.length - 1]
         : null
 
+  // Storm-view lightning: prefer feed events near reconstruction focus when available
   const lastLightningId = useRef<string | null>(null)
   useEffect(() => {
     if (state.viewMode !== 'storm' || !state.layers.lightning) return
+    if (live.lightningEvents.length > 0 && reconMode === 'cell') {
+      // Map timeline cursor into feed events by index cadence
+      const idx = Math.min(
+        live.lightningEvents.length - 1,
+        Math.floor((state.timeline.cursor / Math.max(1, state.timeline.max)) * live.lightningEvents.length),
+      )
+      const hit = live.lightningEvents[idx]
+      if (hit && hit.id !== lastLightningId.current) {
+        lastLightningId.current = hit.id
+        setLightningEvent(hit)
+        setLightningToken((n) => n + 1)
+      }
+      return
+    }
     const base = Date.parse(prototypeProvider.getBaseTimeIso())
     const t = base + state.timeline.cursor * 1000
     const windowMs = 900 * Math.max(1, state.timeline.speed)
@@ -139,30 +192,64 @@ export default function App() {
     }
   }, [
     state.timeline.cursor,
+    state.timeline.max,
     state.viewMode,
     state.layers.lightning,
     state.timeline.speed,
     syntheticLightning,
+    live.lightningEvents,
+    reconMode,
   ])
 
+  const openStormView = useCallback(
+    (mode: 'prototype' | 'cell') => {
+      setReconMode(mode)
+      const recon = mapEnvironmentToReconstruction(
+        live.environment,
+        mode === 'cell' ? selectedTrack : null,
+      )
+      setState((s) => ({
+        ...s,
+        viewMode: 'storm',
+        cloudParams: recon.cloudParams,
+        flashFreq: recon.flashFreq,
+        statusMessage: recon.provenance.summary,
+        panelOpen: true,
+        timeline: {
+          playing: true,
+          cursor: 0,
+          speed: TIMELINE.defaultSpeed,
+          max: TIMELINE.durationSec,
+        },
+      }))
+      setPresetToken((n) => n + 1)
+    },
+    [live.environment, selectedTrack],
+  )
+
   const enterStorm = useCallback(() => {
+    openStormView('prototype')
+  }, [openStormView])
+
+  const enterSelectedCell = useCallback(() => {
+    if (!selectedTrack) return
+    const head = selectedTrack.points[selectedTrack.points.length - 1]
+    setFlyTarget({
+      lon: head.longitude,
+      lat: head.latitude,
+      height: 380_000,
+      token: Date.now(),
+    })
     setState((s) => ({
       ...s,
-      viewMode: 'storm',
-      statusMessage: `${PROTOTYPE_STORM.name} - synthetic demonstration environment`,
-      panelOpen: true,
-      timeline: {
-        playing: true,
-        cursor: 0,
-        speed: TIMELINE.defaultSpeed,
-        max: TIMELINE.durationSec,
-      },
+      statusMessage: `Approaching derived cell ${selectedTrack.stormId}…`,
     }))
-    setPresetToken((n) => n + 1)
-  }, [])
+    window.setTimeout(() => openStormView('cell'), 1400)
+  }, [openStormView, selectedTrack])
 
   const returnGlobe = useCallback(() => {
     const max = Math.max(0, live.radarFrames.length - 1)
+    setReconMode('prototype')
     setState((s) => ({
       ...s,
       viewMode: 'globe',
@@ -200,9 +287,11 @@ export default function App() {
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
-        ? 'Global exploration · radar + derived tracks'
-        : 'Storm environment · not live weather',
-    [state.viewMode],
+        ? 'Radar · derived tracks · optional lightning feed'
+        : reconMode === 'cell'
+          ? 'Cell-informed reconstruction · not measured volume'
+          : 'Prototype storm · synthetic demonstration',
+    [state.viewMode, reconMode],
   )
 
   const clockLabel = useMemo(() => {
@@ -231,6 +320,9 @@ export default function App() {
             cloudParams={state.cloudParams}
             satelliteAvailable={live.satelliteFrames.length > 0}
             tracksLoading={live.tracksLoading}
+            lightningConfigured={live.lightningConfigured}
+            lightningCount={live.lightningEvents.length}
+            hasSelectedTrack={Boolean(selectedTrack)}
             onLightingMode={(lightingMode: LightingMode) => setState((s) => ({ ...s, lightingMode }))}
             onLayers={setLayers}
             onPreset={(cameraPreset: StormCameraPreset) => {
@@ -243,6 +335,7 @@ export default function App() {
               setState((s) => ({ ...s, cloudParams: { ...s.cloudParams, ...partial } }))
             }
             onEnterStorm={approachThenEnter}
+            onEnterSelectedCell={enterSelectedCell}
             onReturnGlobe={returnGlobe}
             onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
             onDemoLightning={() => {
@@ -258,14 +351,20 @@ export default function App() {
             environment={live.environment}
             tracks={live.tracks}
             selectedTrackId={selectedTrackId}
+            reconstruction={
+              state.viewMode === 'storm' ? reconstruction : previewReconstruction
+            }
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
             }
             tracksLoading={live.tracksLoading}
+            lightningConfigured={live.lightningConfigured}
+            lightningCount={live.lightningEvents.length}
             loading={live.loading}
             error={live.error}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
             onEnterStorm={approachThenEnter}
+            onEnterSelectedCell={enterSelectedCell}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
           />
@@ -276,9 +375,13 @@ export default function App() {
             note={
               state.viewMode === 'globe'
                 ? 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
-                : 'Controls synthetic storm animation — not real-time weather observations.'
+                : reconMode === 'cell'
+                  ? 'Prototype animation clock for a cell-informed reconstruction — not observation time.'
+                  : 'Controls synthetic storm animation — not real-time weather observations.'
             }
-            badge={state.viewMode === 'globe' ? 'Observation time' : 'Prototype simulation time'}
+            badge={
+              state.viewMode === 'globe' ? 'Observation time' : 'Prototype simulation time'
+            }
             onChange={(partial) =>
               setState((s) => ({ ...s, timeline: { ...s.timeline, ...partial } }))
             }
@@ -301,6 +404,7 @@ export default function App() {
           active
           requestFlyToStorm={flyStormToken}
           requestFlyHome={flyHomeToken}
+          flyTarget={flyTarget}
           onEnterStorm={enterStorm}
           onTrackSelect={setSelectedTrackId}
           radarFrame={radarFrame}
@@ -310,6 +414,8 @@ export default function App() {
           tracks={live.tracks}
           tracksVisible={state.layers.tracks}
           selectedTrackId={selectedTrackId}
+          lightningEvents={live.lightningEvents}
+          lightningVisible={state.layers.lightningObs}
         />
       ) : (
         <StormView

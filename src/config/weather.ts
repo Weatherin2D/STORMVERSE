@@ -17,3 +17,12 @@ export const OPEN_METEO = {
   forecastUrl: 'https://api.open-meteo.com/v1/forecast',
   attribution: 'Environmental context © Open-Meteo (model forecast)',
 }
+
+/**
+ * Optional licensed lightning FeatureCollection URL.
+ * Example properties: time / observedAt, classification, peakCurrentKa, source.
+ */
+export const LIGHTNING_FEED = {
+  envKey: 'VITE_LIGHTNING_GEOJSON_URL',
+  samplePath: '/samples/lightning.example.geojson',
+}
