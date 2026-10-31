@@ -28,7 +28,7 @@
                     id="risk-url"
                     class="addr"
                     type="url"
-                    placeholder="https://tiles.example/{product}/{z}/{x}/{y}.png"
+                    placeholder={'https://tiles.example/{product}/{z}/{x}/{y}.png'}
                     bind:value={s.risk.products[product].tileUrl}
                     on:change={() => changed()}
                 />
