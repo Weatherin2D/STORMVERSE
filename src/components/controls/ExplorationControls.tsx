@@ -17,6 +17,7 @@ interface ExplorationControlsProps {
   volumePinned: boolean
   followTrack: boolean
   chaseVolume: boolean
+  compareCount: number
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -26,6 +27,8 @@ interface ExplorationControlsProps {
   onEnterStorm: () => void
   onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
+  onCompareTop: () => void
+  onClearCompare: () => void
   onFollowTrack: (v: boolean) => void
   onChaseVolume: (v: boolean) => void
   onReturnGlobe: () => void
@@ -57,6 +60,7 @@ export function ExplorationControls({
   volumePinned,
   followTrack,
   chaseVolume,
+  compareCount,
   onLightingMode,
   onLayers,
   onPreset,
@@ -66,6 +70,8 @@ export function ExplorationControls({
   onEnterStorm,
   onPinSelectedCell,
   onEnterSelectedCell,
+  onCompareTop,
+  onClearCompare,
   onFollowTrack,
   onChaseVolume,
   onReturnGlobe,
@@ -86,10 +92,10 @@ export function ExplorationControls({
               type="button"
               className="primary"
               disabled={!hasSelectedTrack}
-              title="Place a georegistered procedural volume at the selected derived cell"
+              title="Add selected derived cell to the compare set (max 4)"
               onClick={onPinSelectedCell}
             >
-              {volumePinned ? 'Update volume' : 'Pin volume'}
+              {volumePinned ? 'Add to compare' : 'Pin volume'}
             </button>
             <button
               type="button"
@@ -99,6 +105,19 @@ export function ExplorationControls({
             >
               Enter immersive
             </button>
+            <button
+              type="button"
+              disabled={!hasSelectedTrack}
+              title="Pin up to four top-confidence derived cells for side-by-side volumes"
+              onClick={onCompareTop}
+            >
+              Compare cells
+            </button>
+            {compareCount > 0 && (
+              <button type="button" title="Clear all compare volumes" onClick={onClearCompare}>
+                Clear ({compareCount})
+              </button>
+            )}
           </>
         ) : (
           <button type="button" onClick={onReturnGlobe}>

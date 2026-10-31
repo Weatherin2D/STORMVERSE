@@ -16,8 +16,10 @@ import {
   mapEnvironmentToReconstruction,
   prototypeProvider,
   type LightningObservation,
+  type ReconstructionTarget,
 } from './weather'
 import { TIMELINE } from './config/app'
+import { accentForIndex, MAX_COMPARE_VOLUMES } from './config/compare'
 
 export default function App() {
   const reducedMotion = usePrefersReducedMotion()
@@ -44,7 +46,9 @@ export default function App() {
   const [pinnedVolumeSnapshot, setPinnedVolumeSnapshot] = useState(() =>
     mapEnvironmentToReconstruction(null, null),
   )
-  /** When true, pinned cell volume follows the derived track through observation time. */
+  /** Track ids pinned for multi-cell volume comparison (selected is primary). */
+  const [compareTrackIds, setCompareTrackIds] = useState<string[]>([])
+  /** When true, pinned cell volumes follow derived tracks through observation time. */
   const [followTrack, setFollowTrack] = useState(true)
   const [chaseVolume, setChaseVolume] = useState(false)
 
@@ -65,11 +69,13 @@ export default function App() {
   useEffect(() => {
     if (live.tracks.length === 0) {
       setSelectedTrackId(null)
+      setCompareTrackIds([])
       return
     }
     setSelectedTrackId((prev) =>
       prev && live.tracks.some((t) => t.id === prev) ? prev : live.tracks[0].id,
     )
+    setCompareTrackIds((prev) => prev.filter((id) => live.tracks.some((t) => t.id === id)))
   }, [live.tracks])
 
   const selectedTrack = useMemo(
@@ -93,32 +99,49 @@ export default function App() {
     setPinnedVolumeSnapshot(mapEnvironmentToReconstruction(live.environment, null))
   }, [live.environment, pinnedVolumeMode])
 
-  const animatedCellVolume = useMemo(() => {
-    if (pinnedVolumeMode !== 'cell' || !followTrack || !selectedTrack) return null
-    if (live.radarFrames.length === 0) return null
-    const pose = interpolateTrackAtCursor(
-      selectedTrack,
-      live.radarFrames,
-      state.timeline.cursor,
-    )
-    return mapEnvironmentToReconstruction(live.environment, selectedTrack, pose)
+  const compareVolumes = useMemo((): ReconstructionTarget[] => {
+    if (pinnedVolumeMode !== 'cell' || compareTrackIds.length === 0) return []
+    const primaryId = selectedTrackId && compareTrackIds.includes(selectedTrackId)
+      ? selectedTrackId
+      : compareTrackIds[0]
+    const out: ReconstructionTarget[] = []
+    compareTrackIds.forEach((id, index) => {
+      const track = live.tracks.find((t) => t.id === id)
+      if (!track) return
+      const pose =
+        followTrack && live.radarFrames.length > 0
+          ? interpolateTrackAtCursor(track, live.radarFrames, state.timeline.cursor)
+          : null
+      const base = mapEnvironmentToReconstruction(live.environment, track, pose)
+      out.push({
+        ...base,
+        accentCss: accentForIndex(index),
+        primary: id === primaryId,
+      })
+    })
+    return out
   }, [
     pinnedVolumeMode,
-    followTrack,
-    selectedTrack,
+    compareTrackIds,
+    selectedTrackId,
+    live.tracks,
     live.radarFrames,
     live.environment,
+    followTrack,
     state.timeline.cursor,
   ])
 
-  const globeVolumeTarget =
-    pinnedVolumeMode === 'cell' && animatedCellVolume
-      ? animatedCellVolume
-      : pinnedVolumeMode
-        ? pinnedVolumeSnapshot
-        : null
+  const globeVolumeTargets = useMemo(() => {
+    if (pinnedVolumeMode === 'cell') return compareVolumes
+    if (pinnedVolumeMode === 'prototype' && pinnedVolumeSnapshot) {
+      return [{ ...pinnedVolumeSnapshot, accentCss: accentForIndex(0), primary: true }]
+    }
+    return [] as ReconstructionTarget[]
+  }, [pinnedVolumeMode, compareVolumes, pinnedVolumeSnapshot])
 
-  // Optional gentle chase camera while the volume walks the track
+  const globeVolumeTarget = globeVolumeTargets.find((t) => t.primary) ?? globeVolumeTargets[0] ?? null
+
+  // Optional gentle chase camera while the primary volume walks its track
   const lastChaseRef = useRef(0)
   useEffect(() => {
     if (!chaseVolume || !followTrack || pinnedVolumeMode !== 'cell') return
@@ -308,10 +331,17 @@ export default function App() {
     setPinnedVolumeSnapshot(recon)
     setPinnedVolumeMode('cell')
     setFollowTrack(true)
+    setCompareTrackIds((prev) => {
+      if (prev.includes(selectedTrack.id)) return prev
+      if (prev.length >= MAX_COMPARE_VOLUMES) {
+        return [...prev.slice(1), selectedTrack.id]
+      }
+      return [...prev, selectedTrack.id]
+    })
     setState((s) => ({
       ...s,
       layers: { ...s.layers, volume: true },
-      statusMessage: `Pinned volume · follows track with observation time · procedural`,
+      statusMessage: `Pinned ${selectedTrack.stormId} · compare volumes · procedural`,
     }))
     setFlyTarget({
       lon: recon.longitude,
@@ -322,11 +352,62 @@ export default function App() {
     })
   }, [live.environment, live.radarFrames, selectedTrack, state.timeline.cursor])
 
+  const addSelectedToCompare = useCallback(() => {
+    if (!selectedTrack) return
+    pinSelectedCell()
+  }, [pinSelectedCell, selectedTrack])
+
+  const compareTopTracks = useCallback(() => {
+    const top = live.tracks.slice(0, MAX_COMPARE_VOLUMES)
+    if (top.length === 0) return
+    setCompareTrackIds(top.map((t) => t.id))
+    setSelectedTrackId(top[0].id)
+    setPinnedVolumeMode('cell')
+    setFollowTrack(true)
+    const pose = interpolateTrackAtCursor(top[0], live.radarFrames, state.timeline.cursor)
+    const recon = mapEnvironmentToReconstruction(live.environment, top[0], pose)
+    setPinnedVolumeSnapshot(recon)
+    setState((s) => ({
+      ...s,
+      layers: { ...s.layers, volume: true },
+      statusMessage: `Comparing ${top.length} derived cells · procedural volumes`,
+      panelOpen: true,
+    }))
+    setFlyTarget({
+      lon: recon.longitude,
+      lat: recon.latitude,
+      height: 280_000,
+      token: Date.now(),
+      oblique: true,
+    })
+  }, [live.tracks, live.radarFrames, live.environment, state.timeline.cursor])
+
+  const clearCompare = useCallback(() => {
+    setCompareTrackIds([])
+    setPinnedVolumeMode('prototype')
+    setChaseVolume(false)
+    setState((s) => ({
+      ...s,
+      statusMessage: 'Cleared compare volumes',
+    }))
+  }, [])
+
+  const removeFromCompare = useCallback((trackId: string) => {
+    setCompareTrackIds((prev) => {
+      const next = prev.filter((id) => id !== trackId)
+      if (next.length === 0) setPinnedVolumeMode('prototype')
+      return next
+    })
+  }, [])
+
   const enterSelectedCell = useCallback(() => {
     if (!selectedTrack) return
     const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack)
     setPinnedVolumeSnapshot(recon)
     setPinnedVolumeMode('cell')
+    setCompareTrackIds((prev) =>
+      prev.includes(selectedTrack.id) ? prev : [...prev, selectedTrack.id].slice(-MAX_COMPARE_VOLUMES),
+    )
     setFlyTarget({
       lon: recon.longitude,
       lat: recon.latitude,
@@ -385,15 +466,17 @@ export default function App() {
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
-        ? pinnedVolumeMode === 'cell' && followTrack
-          ? 'Volume follows derived track · procedural'
-          : pinnedVolumeMode === 'cell'
-            ? 'Georegistered cell volume · procedural'
-            : 'Radar · tracks · georegistered volume'
+        ? compareTrackIds.length > 1
+          ? `Comparing ${compareTrackIds.length} cell volumes · procedural`
+          : pinnedVolumeMode === 'cell' && followTrack
+            ? 'Volume follows derived track · procedural'
+            : pinnedVolumeMode === 'cell'
+              ? 'Georegistered cell volume · procedural'
+              : 'Radar · tracks · georegistered volume'
         : reconMode === 'cell'
           ? 'Cell-informed reconstruction · not measured volume'
           : 'Prototype storm · synthetic demonstration',
-    [state.viewMode, reconMode, pinnedVolumeMode, followTrack],
+    [state.viewMode, reconMode, pinnedVolumeMode, followTrack, compareTrackIds.length],
   )
 
   const clockLabel = useMemo(() => {
@@ -427,6 +510,7 @@ export default function App() {
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             chaseVolume={chaseVolume}
+            compareCount={compareTrackIds.length}
             hasSelectedTrack={Boolean(selectedTrack)}
             onLightingMode={(lightingMode: LightingMode) => setState((s) => ({ ...s, lightingMode }))}
             onLayers={setLayers}
@@ -442,6 +526,8 @@ export default function App() {
             onEnterStorm={approachThenEnter}
             onPinSelectedCell={pinSelectedCell}
             onEnterSelectedCell={enterSelectedCell}
+            onCompareTop={compareTopTracks}
+            onClearCompare={clearCompare}
             onFollowTrack={setFollowTrack}
             onChaseVolume={setChaseVolume}
             onReturnGlobe={returnGlobe}
@@ -464,6 +550,7 @@ export default function App() {
                 ? reconstruction
                 : globeVolumeTarget ?? previewReconstruction
             }
+            compareVolumes={compareVolumes}
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
             }
@@ -476,9 +563,12 @@ export default function App() {
             error={live.error}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
             onEnterStorm={approachThenEnter}
-            onPinSelectedCell={pinSelectedCell}
+            onPinSelectedCell={addSelectedToCompare}
             onEnterSelectedCell={enterSelectedCell}
             onFollowTrack={setFollowTrack}
+            onCompareTop={compareTopTracks}
+            onClearCompare={clearCompare}
+            onRemoveCompare={removeFromCompare}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
           />
@@ -489,7 +579,9 @@ export default function App() {
             note={
               state.viewMode === 'globe'
                 ? followTrack && pinnedVolumeMode === 'cell'
-                  ? 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
+                  ? compareTrackIds.length > 1
+                    ? 'Scrubs radar frames and walks all compare volumes along their derived tracks.'
+                    : 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
                   : 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
                 : reconMode === 'cell'
                   ? 'Prototype animation clock for a cell-informed reconstruction — not observation time.'
@@ -533,6 +625,7 @@ export default function App() {
           lightningEvents={live.lightningEvents}
           lightningVisible={state.layers.lightningObs}
           volumeTarget={globeVolumeTarget}
+          volumeTargets={globeVolumeTargets}
           volumeVisible={state.layers.volume}
         />
       ) : (

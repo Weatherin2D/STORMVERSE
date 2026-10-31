@@ -14,6 +14,7 @@ interface InfoPanelProps {
   tracks: StormTrack[]
   selectedTrackId: string | null
   reconstruction: ReconstructionTarget | null
+  compareVolumes: ReconstructionTarget[]
   radarLabel: string | null
   tracksLoading: boolean
   lightningConfigured: boolean
@@ -27,6 +28,9 @@ interface InfoPanelProps {
   onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
   onFollowTrack: (v: boolean) => void
+  onCompareTop: () => void
+  onClearCompare: () => void
+  onRemoveCompare: (trackId: string) => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
 }
@@ -39,6 +43,7 @@ export function InfoPanel({
   tracks,
   selectedTrackId,
   reconstruction,
+  compareVolumes,
   radarLabel,
   tracksLoading,
   lightningConfigured,
@@ -52,6 +57,9 @@ export function InfoPanel({
   onPinSelectedCell,
   onEnterSelectedCell,
   onFollowTrack,
+  onCompareTop,
+  onClearCompare,
+  onRemoveCompare,
   onReturnGlobe,
   onSelectTrack,
 }: InfoPanelProps) {
@@ -77,10 +85,9 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Select a derived cell, then <strong>Pin volume</strong> to place a georegistered
-            procedural storm on the globe. With <strong>Follow track</strong> on, the volume walks
-            the track as you scrub observation time. <strong>Enter immersive</strong> opens the
-            local Three.js close-up.
+            Pin cells onto the globe, or use <strong>Compare cells</strong> to place up to four
+            accent-coloured procedural volumes side by side. <strong>Follow track</strong> walks
+            them with observation time; the selected cell is the primary (ray-marched) volume.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
@@ -120,23 +127,92 @@ export function InfoPanel({
               </p>
             ) : (
               <ul className="track-list">
-                {tracks.map((t) => (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      className={t.id === selectedTrackId ? 'active' : ''}
-                      onClick={() => onSelectTrack(t.id)}
-                    >
-                      {t.stormId}
-                      <span>
-                        {t.points.length} pts · conf {Math.round((t.confidence ?? 0) * 100)}%
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {tracks.map((t) => {
+                  const inCompare = compareVolumes.some((v) => v.drivers.trackId === t.id || v.id === t.id)
+                  const accent = compareVolumes.find((v) => v.id === t.id || v.drivers.trackId === t.id)
+                    ?.accentCss
+                  return (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        className={t.id === selectedTrackId ? 'active' : ''}
+                        style={accent ? { boxShadow: `inset 3px 0 0 ${accent}` } : undefined}
+                        onClick={() => onSelectTrack(t.id)}
+                      >
+                        {t.stormId}
+                        {inCompare ? ' · compare' : ''}
+                        <span>
+                          {t.points.length} pts · conf {Math.round((t.confidence ?? 0) * 100)}%
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             )}
+            <div className="control-cluster wrap" style={{ marginTop: '0.6rem' }}>
+              <button type="button" className="primary" disabled={tracks.length === 0} onClick={onCompareTop}>
+                Compare top cells
+              </button>
+              {compareVolumes.length > 0 && (
+                <button type="button" onClick={onClearCompare}>
+                  Clear compare
+                </button>
+              )}
+            </div>
           </div>
+
+          {compareVolumes.length > 0 && (
+            <div className="availability">
+              <h3>Volume compare ({compareVolumes.length})</h3>
+              <p className="provenance">
+                Side-by-side procedural volumes — not measured radar volumes. Primary cell is
+                ray-marched; others use accent schematics.
+              </p>
+              <table className="compare-table">
+                <thead>
+                  <tr>
+                    <th>Cell</th>
+                    <th>Conf</th>
+                    <th>Track</th>
+                    <th>Density</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareVolumes.map((v) => (
+                    <tr key={v.id} className={v.primary ? 'primary-row' : ''}>
+                      <td>
+                        <span className="swatch" style={{ background: v.accentCss ?? '#e8c27a' }} />
+                        {v.label.replace(' reconstruction', '')}
+                        {v.primary ? ' ★' : ''}
+                      </td>
+                      <td>
+                        {v.drivers.cellConfidence != null
+                          ? `${Math.round(v.drivers.cellConfidence * 100)}%`
+                          : '—'}
+                      </td>
+                      <td>
+                        {v.drivers.alongTrackProgress != null
+                          ? `${Math.round(v.drivers.alongTrackProgress * 100)}%`
+                          : '—'}
+                      </td>
+                      <td>{v.cloudParams.density.toFixed(2)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => onRemoveCompare(v.drivers.trackId ?? v.id)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {reconstruction && selected && (
             <div className="availability">
@@ -190,7 +266,7 @@ export function InfoPanel({
               </p>
               <div className="control-cluster wrap">
                 <button type="button" className="primary" onClick={onPinSelectedCell}>
-                  {volumePinned ? 'Update volume on globe' : 'Pin volume on globe'}
+                  {volumePinned ? 'Add selected to compare' : 'Pin volume on globe'}
                 </button>
                 <button
                   type="button"

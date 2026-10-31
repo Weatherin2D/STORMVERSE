@@ -44,11 +44,14 @@ Selected derived track + CAPE → procedural cloud parameters; pluggable GeoJSON
 ### 5 — Georegistered storm volume
 Pin procedural ray-marched volumes at cell lat/lon on Cesium with schematic cues.
 
-### 6 — Track-following volume animation (current)
-- **Follow track** walks the pinned georegistered volume along the derived cell path as observation time plays/scrubs
-- Track pose interpolated between cell points (heuristic geometry — not a forecast)
-- **Chase** optionally re-frames the camera on the moving volume
-- Label shows along-track progress; provenance stays **procedural**
+### 6 — Track-following volume animation
+Follow track / Chase walk pinned volumes along derived paths with observation time.
+
+### 7 — Multi-cell volume compare (current)
+- **Compare cells** pins up to four derived cells as accent-coloured georegistered volumes
+- Selected cell is **primary** (ray-marched); others use matching schematic towers
+- Compare table in the info panel (confidence, along-track %, density)
+- Add/remove individual cells; Follow track animates the whole set
 
 ## Scientific integrity
 
@@ -58,24 +61,24 @@ Pin procedural ray-marched volumes at cell lat/lon on Cesium with schematic cues
 | Cell tracks | Derived heuristic (low confidence) |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
-| Globe volume / track animation | **Procedural**, georegistered by interpolated track pose |
-| Immersive 3D storm | **Procedural** local scene (same drivers) |
+| Globe volume / compare set | **Procedural**, georegistered |
+| Immersive 3D storm | **Procedural** local scene |
 | Globe lightning | Direct only if you supply a licensed GeoJSON feed |
 | Prototype storm / demo bolts | Synthetic |
 
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
-- Track animation interpolates derived cell centroids — not a radar volume product
+- Compare volumes are visualisation aids, not measured radar volumes
 - Tracks empty when Australia mosaics lack precip
-- Immersive scene remains a local Three.js environment
+- Only the primary compare volume is fully ray-marched (performance)
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
 3. Skill scores for cell tracking
-4. Multi-cell volume comparison on the globe
+4. Export compare snapshots / shareable scene state
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

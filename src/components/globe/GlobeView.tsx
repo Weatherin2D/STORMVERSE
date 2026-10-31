@@ -34,6 +34,7 @@ interface GlobeViewProps {
   lightningEvents: LightningObservation[]
   lightningVisible: boolean
   volumeTarget: ReconstructionTarget | null
+  volumeTargets: ReconstructionTarget[]
   volumeVisible: boolean
 }
 
@@ -53,6 +54,7 @@ export function GlobeView({
   lightningEvents,
   lightningVisible,
   volumeTarget,
+  volumeTargets,
   volumeVisible,
 }: GlobeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -86,7 +88,8 @@ export function GlobeView({
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
         globe.setTracks(tracks, selectedTrackId)
         globe.setLightningEvents(lightningEvents)
-        if (volumeTarget) globe.setVolumeTarget(volumeTarget)
+        if (volumeTargets.length > 0) globe.setVolumeTargets(volumeTargets)
+        else if (volumeTarget) globe.setVolumeTarget(volumeTarget)
       })
       .catch((err) => {
         console.error('Failed to initialise Cesium globe', err)
@@ -154,8 +157,12 @@ export function GlobeView({
   }, [lightningVisible])
 
   useEffect(() => {
+    if (volumeTargets.length > 0) {
+      globeRef.current?.setVolumeTargets(volumeTargets)
+      return
+    }
     globeRef.current?.setVolumeTarget(volumeTarget)
-  }, [volumeTarget])
+  }, [volumeTarget, volumeTargets])
 
   useEffect(() => {
     globeRef.current?.setVolumeVisible(volumeVisible)

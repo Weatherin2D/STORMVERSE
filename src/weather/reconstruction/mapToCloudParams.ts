@@ -6,12 +6,18 @@ import type { Provenance } from '../types/provenance'
 import type { TrackPose } from './interpolateTrack'
 
 export interface ReconstructionTarget {
+  /** Stable id for multi-volume compare (usually storm/track id). */
+  id: string
   longitude: number
   latitude: number
   label: string
   cloudParams: CloudParams
   flashFreq: number
   provenance: Provenance
+  /** CSS hex accent for compare styling on the globe. */
+  accentCss?: string
+  /** Ray-march this instance (primary); others may be schematic-only. */
+  primary?: boolean
   drivers: {
     capeJkg?: number
     cellConfidence?: number
@@ -19,6 +25,7 @@ export interface ReconstructionTarget {
     alongTrackProgress?: number
     speedKmh?: number
     animated?: boolean
+    trackId?: string
   }
 }
 
@@ -60,11 +67,13 @@ export function mapEnvironmentToReconstruction(
   const animated = Boolean(pose)
 
   return {
+    id: track?.id ?? 'prototype',
     longitude: lon,
     latitude: lat,
     label: track ? `${track.stormId} reconstruction` : 'Prototype reconstruction',
     cloudParams,
     flashFreq: clamp01(0.2 + intensity * 0.55),
+    primary: true,
     drivers: {
       capeJkg: environment?.capeJkg,
       cellConfidence: track?.confidence,
@@ -72,6 +81,7 @@ export function mapEnvironmentToReconstruction(
       alongTrackProgress: pose?.progress,
       speedKmh: pose?.speedKmh,
       animated,
+      trackId: track?.id,
     },
     provenance: {
       kind: 'procedural',

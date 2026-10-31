@@ -57,6 +57,7 @@ export interface StormverseGlobe {
   setLightningEvents: (events: LightningObservation[]) => void
   setLightningVisible: (visible: boolean) => void
   setVolumeTarget: (target: ReconstructionTarget | null) => void
+  setVolumeTargets: (targets: ReconstructionTarget[]) => void
   setVolumeVisible: (visible: boolean) => void
   destroy: () => void
 }
@@ -408,7 +409,7 @@ export async function createStormverseGlobe(
     if (picked && typeof picked === 'object' && 'id' in picked) {
       const rawId = (picked as { id?: unknown }).id
       // Primitive GeometryInstance id is a plain string
-      if (rawId === 'stormverse-georegistered-volume') {
+      if (typeof rawId === 'string' && rawId.startsWith('stormverse-vol-')) {
         options.onStormSelect?.()
         return
       }
@@ -420,10 +421,7 @@ export async function createStormverseGlobe(
       const entityId = typeof entity === 'string' ? entity : entity?.id
       if (
         entityId === PROTOTYPE_STORM.id ||
-        entityId === 'stormverse-volume-label' ||
-        entityId === 'stormverse-volume-core' ||
-        entityId === 'stormverse-volume-anvil' ||
-        entityId === 'stormverse-volume-precip'
+        (typeof entityId === 'string' && entityId.startsWith('stormverse-vol-'))
       ) {
         options.onStormSelect?.()
         return
@@ -527,6 +525,7 @@ export async function createStormverseGlobe(
     setLightningEvents,
     setLightningVisible,
     setVolumeTarget: (target) => volume.setTarget(target),
+    setVolumeTargets: (targets) => volume.setTargets(targets),
     setVolumeVisible: (v) => volume.setVisible(v),
     destroy: () => {
       volume.destroy()

@@ -430,6 +430,42 @@ button {
   white-space: nowrap;
 }
 
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 8px 0 4px;
+}
+
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.compare-table th {
+  color: var(--text-dim);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.compare-table .primary-row td {
+  color: var(--text);
+}
+
+.compare-table .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .cross-section {
   margin: 12px 0 14px;
 }
