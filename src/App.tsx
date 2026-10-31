@@ -6,6 +6,16 @@ import { ExplorationControls } from './components/controls/ExplorationControls'
 import { InfoPanel } from './components/panels/InfoPanel'
 import { TimelineBar } from './components/timeline/TimelineBar'
 import { createInitialAppState, type LayerState } from './lib/appState'
+import {
+  buildSceneSnapshot,
+  buildShareUrl,
+  decodeSceneHash,
+  downloadSceneSnapshot,
+  encodeSceneHash,
+  resolveTimelineCursor,
+  snapshotFromJson,
+  type SceneSnapshot,
+} from './lib/sceneSnapshot'
 import { usePrefersReducedMotion } from './hooks/usePrefersReducedMotion'
 import { useLiveWeather } from './hooks/useLiveWeather'
 import type { StormCameraPreset } from './rendering/storm/StormControls'
@@ -20,6 +30,7 @@ import {
 } from './weather'
 import { TIMELINE } from './config/app'
 import { accentForIndex, MAX_COMPARE_VOLUMES } from './config/compare'
+import { SceneShareControls } from './components/controls/SceneShareControls'
 
 export default function App() {
   const reducedMotion = usePrefersReducedMotion()
@@ -51,6 +62,10 @@ export default function App() {
   /** When true, pinned cell volumes follow derived tracks through observation time. */
   const [followTrack, setFollowTrack] = useState(true)
   const [chaseVolume, setChaseVolume] = useState(false)
+  const [pendingSnapshot, setPendingSnapshot] = useState<SceneSnapshot | null>(() =>
+    typeof window !== 'undefined' ? decodeSceneHash(window.location.hash) : null,
+  )
+  const snapshotAppliedRef = useRef(false)
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -463,6 +478,212 @@ export default function App() {
     setState((s) => ({ ...s, layers: { ...s.layers, ...partial } }))
   }
 
+  const captureSnapshot = useCallback((): SceneSnapshot => {
+    const selectedStormId =
+      live.tracks.find((t) => t.id === selectedTrackId)?.stormId ?? selectedTrackId
+    const compareStormIds = compareTrackIds.map(
+      (id) => live.tracks.find((t) => t.id === id)?.stormId ?? id,
+    )
+    const observedAt =
+      state.viewMode === 'globe' && live.radarFrames.length > 0
+        ? live.radarFrames[
+            Math.min(live.radarFrames.length - 1, Math.max(0, Math.round(state.timeline.cursor)))
+          ]?.observedAt
+        : null
+    return buildSceneSnapshot({
+      viewMode: state.viewMode,
+      lightingMode: state.lightingMode,
+      layers: state.layers,
+      timeline: state.timeline,
+      reducedFlash: state.reducedFlash,
+      panelOpen: state.panelOpen,
+      selectedStormId,
+      compareStormIds,
+      pinnedVolumeMode,
+      followTrack,
+      chaseVolume,
+      observedAt,
+      camera: flyTarget
+        ? {
+            lon: flyTarget.lon,
+            lat: flyTarget.lat,
+            height: flyTarget.height,
+            oblique: flyTarget.oblique,
+          }
+        : globeVolumeTarget
+          ? {
+              lon: globeVolumeTarget.longitude,
+              lat: globeVolumeTarget.latitude,
+              height: 220_000,
+              oblique: true,
+            }
+          : undefined,
+    })
+  }, [
+    live.tracks,
+    live.radarFrames,
+    selectedTrackId,
+    compareTrackIds,
+    state.viewMode,
+    state.lightingMode,
+    state.layers,
+    state.timeline,
+    state.reducedFlash,
+    state.panelOpen,
+    pinnedVolumeMode,
+    followTrack,
+    chaseVolume,
+    flyTarget,
+    globeVolumeTarget,
+  ])
+
+  const applySceneSnapshot = useCallback(
+    (snap: SceneSnapshot) => {
+      const stormToTrack = new Map(live.tracks.map((t) => [t.stormId, t.id]))
+      const resolveId = (stormId: string | null | undefined) => {
+        if (!stormId) return null
+        return stormToTrack.get(stormId) ?? live.tracks.find((t) => t.id === stormId)?.id ?? null
+      }
+
+      const compareIds = snap.exploration.compareStormIds
+        .map((id) => resolveId(id))
+        .filter((id): id is string => Boolean(id))
+        .slice(0, MAX_COMPARE_VOLUMES)
+
+      const selected =
+        resolveId(snap.exploration.selectedStormId) ??
+        compareIds[0] ??
+        live.tracks[0]?.id ??
+        null
+
+      const cursor = resolveTimelineCursor(snap, {
+        frameCount: live.radarFrames.length,
+        observedAts: live.radarFrames.map((f) => f.observedAt),
+        stormDurationSec: TIMELINE.durationSec,
+      })
+      const max =
+        snap.viewMode === 'globe'
+          ? Math.max(0, live.radarFrames.length - 1)
+          : TIMELINE.durationSec
+
+      setFollowTrack(snap.exploration.followTrack)
+      setChaseVolume(snap.exploration.chaseVolume)
+      setCompareTrackIds(compareIds)
+      setSelectedTrackId(selected)
+      setPinnedVolumeMode(snap.exploration.pinnedVolumeMode)
+      setReconMode(snap.viewMode === 'storm' ? (selected ? 'cell' : 'prototype') : 'prototype')
+
+      if (selected && snap.exploration.pinnedVolumeMode === 'cell') {
+        const track = live.tracks.find((t) => t.id === selected) ?? null
+        if (track) {
+          const pose =
+            snap.exploration.followTrack && live.radarFrames.length > 0
+              ? interpolateTrackAtCursor(track, live.radarFrames, cursor)
+              : null
+          setPinnedVolumeSnapshot(
+            mapEnvironmentToReconstruction(live.environment, track, pose),
+          )
+        }
+      }
+
+      setState((s) => ({
+        ...s,
+        viewMode: snap.viewMode,
+        lightingMode: snap.lightingMode,
+        layers: { ...s.layers, ...snap.layers },
+        reducedFlash: snap.exploration.reducedFlash,
+        panelOpen: snap.exploration.panelOpen,
+        timeline: {
+          playing: snap.timeline.playing,
+          speed: snap.timeline.speed,
+          cursor,
+          max,
+        },
+        statusMessage: `Restored scene snapshot · ${snap.exportedAt.replace('T', ' ').slice(0, 19)}Z`,
+      }))
+
+      if (snap.camera) {
+        setFlyTarget({
+          lon: snap.camera.lon,
+          lat: snap.camera.lat,
+          height: snap.camera.height,
+          oblique: snap.camera.oblique,
+          token: Date.now(),
+        })
+      }
+
+      try {
+        const hash = encodeSceneHash(snap).slice(1)
+        if (window.location.hash.slice(1) !== hash) {
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${hash}`)
+        }
+      } catch {
+        /* ignore history errors */
+      }
+    },
+    [live.tracks, live.radarFrames, live.environment],
+  )
+
+  // Apply URL/imported snapshot once radar (and preferably tracks) are ready.
+  useEffect(() => {
+    if (!pendingSnapshot || snapshotAppliedRef.current) return
+    if (live.loading) return
+    if (pendingSnapshot.viewMode === 'globe' && live.radarFrames.length === 0) return
+    // Wait for track derivation when the snapshot references cells
+    const needsTracks =
+      pendingSnapshot.exploration.compareStormIds.length > 0 ||
+      pendingSnapshot.exploration.pinnedVolumeMode === 'cell'
+    if (needsTracks && (live.tracksLoading || live.tracks.length === 0)) return
+    snapshotAppliedRef.current = true
+    applySceneSnapshot(pendingSnapshot)
+    setPendingSnapshot(null)
+  }, [
+    pendingSnapshot,
+    live.loading,
+    live.radarFrames.length,
+    live.tracksLoading,
+    live.tracks.length,
+    applySceneSnapshot,
+  ])
+
+  const exportSceneJson = useCallback(() => {
+    downloadSceneSnapshot(captureSnapshot())
+  }, [captureSnapshot])
+
+  const copyShareLink = useCallback(async () => {
+    const snap = captureSnapshot()
+    const url = buildShareUrl(snap)
+    try {
+      window.history.replaceState(null, '', url)
+    } catch {
+      /* ignore */
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setState((s) => ({ ...s, statusMessage: 'Share link copied · scene encoded in URL hash' }))
+      return true
+    } catch {
+      setState((s) => ({
+        ...s,
+        statusMessage: 'Scene hash updated in URL · clipboard unavailable',
+      }))
+      return false
+    }
+  }, [captureSnapshot])
+
+  const importSceneText = useCallback(
+    (text: string) => {
+      const snap = snapshotFromJson(text)
+      if (!snap) {
+        return { ok: false, message: 'Invalid STORMVERSE scene JSON' }
+      }
+      snapshotAppliedRef.current = false
+      setPendingSnapshot(snap)
+      return { ok: true, message: 'Scene import queued — applying when data is ready' }
+    },
+    [],
+  )
+
   const trackSkillById = useMemo(
     () => Object.fromEntries(live.trackSkills.map((s) => [s.trackId, s.composite])),
     [live.trackSkills],
@@ -552,6 +773,12 @@ export default function App() {
               setLightningToken((n) => n + 1)
             }}
             onRefreshWeather={live.refresh}
+          />
+          <SceneShareControls
+            disabled={live.loading}
+            onExportJson={exportSceneJson}
+            onCopyLink={copyShareLink}
+            onImportText={importSceneText}
           />
           <InfoPanel
             open={state.panelOpen}

@@ -27,6 +27,14 @@ VITE_LIGHTNING_GEOJSON_URL=      # optional licensed lightning FeatureCollection
 
 Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).
 
+### Scene snapshots
+
+Use **Export scene** / **Copy share link** / **Import scene** in the control dock:
+
+- JSON download captures layers, timeline, compare set, volume pin, follow/chase, and camera
+- Share links encode the same payload in the URL hash (`#scene=…`)
+- Restore rematches cells by `stormId` against the live derived-track catalogue (radar is always re-fetched)
+
 ## Milestone status
 
 ### 1 — Visual prototype
@@ -50,11 +58,13 @@ Follow track / Chase walk pinned volumes along derived paths with observation ti
 ### 7 — Multi-cell volume compare
 Up to four accent-coloured georegistered volumes with compare table metrics.
 
-### 8 — Tracking quality proxies (current)
-- Heuristic **skill-style scores** per derived track: coverage, continuity, speed steadiness, path smoothness
-- Composite grade (`weak` / `fair` / `solid`) in the info panel, track list, compare table, and globe labels
-- Catalogue mean + grade counts
-- Explicit provenance: **not** formal verification against BoM/truth cells — self-consistency of the derived heuristic only
+### 8 — Tracking quality proxies
+Heuristic coverage / continuity / speed / smoothness scores with non-verification provenance.
+
+### 9 — Shareable scene snapshots (current)
+- Export JSON scene state for compare sets and exploration UI
+- Copy URL hash share links; open/import to restore
+- Live radar and tracks still refresh from providers on restore
 
 ## Scientific integrity
 
@@ -66,6 +76,7 @@ Up to four accent-coloured georegistered volumes with compare table metrics.
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
 | Globe volume / compare set | **Procedural**, georegistered |
+| Scene snapshot | UI/state only — does not freeze live weather fields |
 | Immersive 3D storm | **Procedural** local scene |
 | Globe lightning | Direct only if you supply a licensed GeoJSON feed |
 | Prototype storm / demo bolts | Synthetic |
@@ -73,16 +84,16 @@ Up to four accent-coloured georegistered volumes with compare table metrics.
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
+- Snapshots cannot guarantee the same cells exist after catalogue refresh
 - Track “skill” scores have no ground-truth reference
-- Compare volumes are visualisation aids, not measured radar volumes
 - Tracks empty when Australia mosaics lack precip
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
-3. Export compare snapshots / shareable scene state
-4. Optional verification hooks when a licensed truth cell product is available
+3. Optional verification hooks when a licensed truth cell product is available
+4. Snapshot galleries / named bookmarks in local storage
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
