@@ -51,68 +51,101 @@ function inkMatches(luminance: number, ink: InkTarget): boolean {
     return ink === 'all' || (ink === 'dark' && luminance < 128) || (ink === 'light' && luminance >= 128);
 }
 
-/**
- * Coastlines and borders are baked into one tile as black strokes.
- * A single rule recolours every matching pixel. Two rules split the stroke:
- * the soft edge takes the outline colour and the solid core takes the border colour.
- */
-export function colorForPixel(
-    r: number,
-    g: number,
-    b: number,
-    a: number,
-    rules: RecolorRule[],
-): [number, number, number] | null {
-    if (a === 0 || rules.length === 0) return null;
-    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-    const matching = rules.filter(rule => inkMatches(luminance, rule.ink));
-    if (!matching.length) return null;
-    if (matching.length === 1) return matching[0].color;
-    const borders = matching.find(rule => rule.kind === 'borders');
-    const outlines = matching.find(rule => rule.kind === 'outlines');
-    if (borders && outlines) return a >= 100 ? borders.color : outlines.color;
-    return matching[matching.length - 1].color;
+function lineRadius(thickness: number): number {
+    return Math.max(1, Math.round(Number(thickness) || 1)) - 1;
 }
 
-export function dilateAlpha(data: Uint8ClampedArray, width: number, height: number, radius: number): void {
-    const dilate = Math.max(0, Math.round(radius));
-    if (!dilate) return;
-    const src = new Uint8ClampedArray(data);
+function coverageAlpha(radius: number, distance: number, sourceAlpha: number): number {
+    const coverage = Math.min(1, Math.max(0, radius + 0.65 - distance));
+    const alpha = Math.round(255 * coverage);
+    return distance === 0 ? Math.max(sourceAlpha, alpha) : alpha;
+}
+
+/**
+ * Paint one colour onto a copy of the source tile.
+ * Thickness 1 recolours matching pixels and keeps their alpha.
+ * A higher thickness stamps a disk (radius = thickness - 1) around each of them.
+ * Closer stamps win, so the stroke stays a solid line with a soft rim.
+ */
+function paintRule(
+    src: Uint8ClampedArray,
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+    rule: RecolorRule,
+): void {
+    const radius = lineRadius(rule.thickness);
+    const [cr, cg, cb] = rule.color;
+    const count = width * height;
+    if (radius === 0) {
+        for (let i = 0; i < count; i++) {
+            const o = i * 4;
+            const alpha = src[o + 3];
+            if (alpha === 0) continue;
+            const luminance = 0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2];
+            if (!inkMatches(luminance, rule.ink)) continue;
+            data[o] = cr;
+            data[o + 1] = cg;
+            data[o + 2] = cb;
+            data[o + 3] = alpha;
+        }
+        return;
+    }
+
+    const reach = radius + 0.65;
+    const reach2 = reach * reach;
+    const dist = new Float32Array(count);
+    dist.fill(Number.POSITIVE_INFINITY);
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
-            const idx = (y * width + x) * 4;
-            if (src[idx + 3] > 0) continue;
-            let painted = false;
-            for (let dy = -dilate; dy <= dilate && !painted; dy++) {
-                const ny = y + dy;
-                if (ny < 0 || ny >= height) continue;
-                for (let dx = -dilate; dx <= dilate; dx++) {
-                    const nx = x + dx;
-                    if (nx < 0 || nx >= width) continue;
-                    const nidx = (ny * width + nx) * 4;
-                    if (src[nidx + 3] === 0) continue;
-                    data[idx] = src[nidx];
-                    data[idx + 1] = src[nidx + 1];
-                    data[idx + 2] = src[nidx + 2];
-                    data[idx + 3] = src[nidx + 3];
-                    painted = true;
-                    break;
+            const o = (y * width + x) * 4;
+            const alpha = src[o + 3];
+            if (alpha === 0) continue;
+            const luminance = 0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2];
+            if (!inkMatches(luminance, rule.ink)) continue;
+            const y0 = Math.max(0, Math.ceil(y - reach));
+            const y1 = Math.min(height - 1, Math.floor(y + reach));
+            const x0 = Math.max(0, Math.ceil(x - reach));
+            const x1 = Math.min(width - 1, Math.floor(x + reach));
+            for (let ny = y0; ny <= y1; ny++) {
+                const dy = ny - y;
+                for (let nx = x0; nx <= x1; nx++) {
+                    const dx = nx - x;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 > reach2) continue;
+                    const pi = ny * width + nx;
+                    const d = Math.sqrt(d2);
+                    if (d >= dist[pi]) continue;
+                    const nextAlpha = coverageAlpha(radius, d, alpha);
+                    if (nextAlpha === 0) continue;
+                    dist[pi] = d;
+                    const oi = pi * 4;
+                    data[oi] = cr;
+                    data[oi + 1] = cg;
+                    data[oi + 2] = cb;
+                    data[oi + 3] = nextAlpha;
                 }
             }
         }
     }
 }
 
+/**
+ * Coastlines and borders share one black stroke. Outlines are stamped first
+ * and borders on top, so a thicker outline is a casing around the border.
+ * One rule paints the whole stroke in that colour and width.
+ */
 export function recolorImageData(data: Uint8ClampedArray, width: number, height: number, rules: RecolorRule[]): void {
-    const thickness = Math.max(1, ...rules.map(rule => rule.thickness || 1));
-    dilateAlpha(data, width, height, thickness - 1);
-    for (let i = 0; i < data.length; i += 4) {
-        const next = colorForPixel(data[i], data[i + 1], data[i + 2], data[i + 3], rules);
-        if (!next) continue;
-        data[i] = next[0];
-        data[i + 1] = next[1];
-        data[i + 2] = next[2];
+    if (!rules.length || width < 1 || height < 1) return;
+    const src = new Uint8ClampedArray(data);
+    const ordered = [
+        ...rules.filter(rule => rule.kind === 'outlines'),
+        ...rules.filter(rule => rule.kind === 'borders'),
+    ];
+    for (const rule of rules) {
+        if (rule.kind !== 'outlines' && rule.kind !== 'borders') ordered.push(rule);
     }
+    for (const rule of ordered) paintRule(src, data, width, height, rule);
 }
 
 const SEA = /vec3\s+sea\s*=\s*vec3\([^)]*\)/;

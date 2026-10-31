@@ -57,29 +57,31 @@
                     <option value="light">Light parts</option>
                 </select>
             </div>
-            <div class="row tight">
-                <label class="grow" for="thickness-{kind}">Line thickness: {s.kinds[kind].thickness ?? 1}×</label>
-                <input
-                    id="thickness-{kind}"
-                    type="range"
-                    min="1"
-                    max="5"
-                    step="1"
-                    bind:value={s.kinds[kind].thickness}
-                    on:change={() => {
-                        if (Number(s.kinds[kind].thickness) > 1) s.kinds[kind].recolor = true;
-                        changed(kind);
-                    }}
-                    aria-label="{kindLabels[kind]} thickness"
-                    class="slider"
-                />
-            </div>
+            {#if kind !== 'labels'}
+                <div class="row tight">
+                    <label class="grow" for="thickness-{kind}">Line thickness: {s.kinds[kind].thickness ?? 1}×</label>
+                    <input
+                        id="thickness-{kind}"
+                        type="range"
+                        min="1"
+                        max="5"
+                        step="1"
+                        bind:value={s.kinds[kind].thickness}
+                        on:change={() => {
+                            if (Number(s.kinds[kind].thickness) > 1) s.kinds[kind].recolor = true;
+                            changed(kind);
+                        }}
+                        aria-label="{kindLabels[kind]} thickness"
+                        class="slider"
+                    />
+                </div>
+            {/if}
         </div>
     {/each}
     <small class="note">
-        Coastlines and borders are drawn from the same tiles. Either colour changes those lines. With both switched on,
-        the border colour is the solid part of the line and the outline colour is the soft edge. Label colour changes the
-        place names. The background colour replaces Windy's land and sea fill.
+        Coastlines and borders come from the same tiles. The outline colour is a casing and the border colour is drawn
+        on top. Make the outline thicker than the border to see the casing. Either colour on its own paints the whole
+        line. Label colour changes the place names. The background colour replaces Windy's land and sea fill.
     </small>
 
     <h3>Weather icons</h3>

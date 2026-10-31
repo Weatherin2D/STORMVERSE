@@ -10,7 +10,7 @@ export interface KindStyle {
     color: string;
     /** Which pixels of a baked (raster) tile get the new colour. */
     ink: InkTarget;
-    /** Line thickness multiplier: 1 = original, 2 = dilate 1px, 3 = dilate 2px, etc. */
+    /** Line thickness. 1 keeps the original width. Each step above 1 adds about 1px. */
     thickness: number;
     /** Manual list of map layer ids. Empty means "auto-detect by name". */
     layerIds: string[];

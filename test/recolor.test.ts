@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-    colorForPixel,
     fragmentForBackground,
     isAutoBasemapTile,
     labelCss,
@@ -47,15 +46,32 @@ test('manual prefixes override auto detection', () => {
     assert.equal(rulesForUrl('https://tiles.windy.com/tiles/v10.0/temp/1/0/0.png', [outline]).length, 0);
 });
 
-test('one rule recolours the whole stroke and keeps transparency', () => {
-    assert.deepEqual(colorForPixel(0, 0, 0, 0, [outline]), null);
-    assert.deepEqual(colorForPixel(0, 0, 0, 40, [outline]), [255, 0, 0]);
-    assert.deepEqual(colorForPixel(0, 0, 0, 200, [outline]), [255, 0, 0]);
+test('one rule recolours the whole stroke and keeps its alpha', () => {
+    const pixels = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 200]);
+    recolorImageData(pixels, 3, 1, [outline]);
+    assert.deepEqual(Array.from(pixels.slice(0, 4)), [0, 0, 0, 0]);
+    assert.deepEqual(Array.from(pixels.slice(4, 8)), [255, 0, 0, 40]);
+    assert.deepEqual(Array.from(pixels.slice(8, 12)), [255, 0, 0, 200]);
 });
 
-test('two rules split the soft edge from the solid core', () => {
-    assert.deepEqual(colorForPixel(0, 0, 0, 40, [outline, border]), [255, 0, 0]);
-    assert.deepEqual(colorForPixel(0, 0, 0, 157, [outline, border]), [0, 0, 255]);
+test('two rules of equal thickness paint the border colour across the whole stroke', () => {
+    const pixels = new Uint8ClampedArray([0, 0, 0, 40, 0, 0, 0, 157]);
+    recolorImageData(pixels, 2, 1, [outline, border]);
+    assert.deepEqual(Array.from(pixels.slice(0, 4)), [0, 0, 255, 40]);
+    assert.deepEqual(Array.from(pixels.slice(4, 8)), [0, 0, 255, 157]);
+});
+
+test('a thicker outline leaves a casing around the border', () => {
+    const wideOutline: RecolorRule = { ...outline, thickness: 3 };
+    const pixels = new Uint8ClampedArray(5 * 4);
+    pixels[2 * 4 + 3] = 200;
+    recolorImageData(pixels, 5, 1, [wideOutline, border]);
+    const rim = Math.round(255 * 0.65);
+    assert.deepEqual(Array.from(pixels.slice(0, 4)), [255, 0, 0, rim]);
+    assert.deepEqual(Array.from(pixels.slice(4, 8)), [255, 0, 0, 255]);
+    assert.deepEqual(Array.from(pixels.slice(8, 12)), [0, 0, 255, 200]);
+    assert.deepEqual(Array.from(pixels.slice(12, 16)), [255, 0, 0, 255]);
+    assert.deepEqual(Array.from(pixels.slice(16, 20)), [255, 0, 0, rim]);
 });
 
 test('ink filter leaves the other pixels alone', () => {
@@ -67,12 +83,20 @@ test('ink filter leaves the other pixels alone', () => {
     assert.deepEqual(Array.from(pixels.slice(8, 12)), [0, 0, 0, 0]);
 });
 
-test('thickness grows the stroke before recolouring', () => {
+test('thickness grows the stroke into a solid line', () => {
     const thick: RecolorRule = { ...outline, thickness: 2 };
     const pixels = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 200]);
     recolorImageData(pixels, 2, 1, [thick]);
     assert.equal(pixels[3] > 0, true);
     assert.deepEqual(Array.from(pixels.slice(0, 3)), [255, 0, 0]);
+    assert.deepEqual(Array.from(pixels.slice(4, 7)), [255, 0, 0]);
+    assert.equal(pixels[7], 255);
+});
+
+test('thickness 1 does not widen the stroke', () => {
+    const pixels = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 200]);
+    recolorImageData(pixels, 2, 1, [outline]);
+    assert.deepEqual(Array.from(pixels.slice(0, 4)), [0, 0, 0, 0]);
     assert.deepEqual(Array.from(pixels.slice(4, 8)), [255, 0, 0, 200]);
 });
 

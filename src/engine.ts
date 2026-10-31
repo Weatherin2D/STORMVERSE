@@ -24,8 +24,8 @@ export const ICONS: IconKind[] = ['lightning', 'snow', 'hail'];
 export const settings: Settings = loadSettings();
 
 const STYLE_ELEMENT_ID = 'windy-plugin-map-style';
-const FETCH_VERSION = 3;
-const IMAGE_PATCH_VERSION = 3;
+const FETCH_VERSION = 4;
+const IMAGE_PATCH_VERSION = 4;
 
 /* ------------------------------------------------------------------ */
 /* Map access                                                          */
@@ -162,6 +162,7 @@ async function recolorBlob(blob: Blob, rules: RecolorRule[]): Promise<Blob> {
     const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('no 2d context');
+    context.imageSmoothingEnabled = false;
     context.drawImage(bitmap, 0, 0);
     bitmap.close?.();
     const image = context.getImageData(0, 0, width, height);
