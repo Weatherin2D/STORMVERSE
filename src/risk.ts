@@ -199,6 +199,25 @@ export function riskTileUrl(template: string, product: RiskProduct, z: number, x
         .replaceAll('{y}', String(y));
 }
 
+/** Idents Windy's layer menu can list without colliding with its own products (`thunder` is already one). */
+export const RISK_MENU_IDENTS: Record<RiskProduct, string> = {
+    convective: 'wms-convective',
+    tornado: 'wms-tornado',
+    largeHail: 'wms-large-hail',
+    damagingWinds: 'wms-damaging-winds',
+    hailSize: 'wms-hail-size',
+    thunder: 'wms-thunder',
+};
+
+/** Append the risk idents to a menu group. Repeating the call does not duplicate them. */
+export function addRiskIdents(group: string[]): void {
+    if (!Array.isArray(group)) return;
+    for (const product of RISK_PRODUCTS) {
+        const ident = RISK_MENU_IDENTS[product];
+        if (!group.includes(ident)) group.push(ident);
+    }
+}
+
 export function legendGradient(stops: ColorStop[]): string {
     const ordered = [...stops].filter(stop => Number.isFinite(stop.value) && parseHexColor(stop.color)).sort((a, b) => a.value - b.value);
     if (!ordered.length) return 'transparent';

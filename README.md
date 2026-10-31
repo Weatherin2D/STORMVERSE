@@ -14,7 +14,7 @@ Radar and satellite share their symbols: the lightning bolt, the snowflake, and 
 
 ## Risk overlays
 
-The same products are listed in Windy’s layer menu, in a Risk category under Rain, snow. Open Map style once so the category can be added, then open the layer menu. Picking a product there turns it on. Picking it again, or picking one of Windy’s own layers, turns it off. The tile address and colour scale stay in the plugin. Paste an address that contains `{z}`, `{x}`, and `{y}`. `{product}` is replaced with the product id (`convective`, `tornado`, `largeHail`, `damagingWinds`, `hailSize`, or `thunder`). The overlay is drawn above the basemap. Turn the globe off to see it.
+The same products are listed in Windy’s layer menu, at the end of Rain, snow. Reload the page and open Map style once so they can be added, then open the layer menu again. Picking a product there turns it on. Picking it again, or picking one of Windy’s own layers, turns it off. The tile address and colour scale stay in the plugin. Paste an address that contains `{z}`, `{x}`, and `{y}`. `{product}` is replaced with the product id (`convective`, `tornado`, `largeHail`, `damagingWinds`, `hailSize`, or `thunder`). The overlay is drawn above the basemap. Turn the globe off to see it.
 
 Tiles are 256×256 PNGs. A fully transparent pixel is no data. Every other pixel is opaque, and red and green store the number as `(red × 256 + green) ÷ 65535 × maximum`. The maximum is 100 for the percent products. For hail size it is the highest colour-scale stop, in millimetres. The readout can show that size in millimetres, centimetres, or inches.
 

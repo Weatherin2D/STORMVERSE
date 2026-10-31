@@ -1,23 +1,36 @@
 import store from '@windy/store';
-import { RISK_LABELS, RISK_PRODUCTS } from './risk';
+import { addRiskIdents, defaultStops, RISK_LABELS, RISK_MENU_IDENTS, RISK_PRODUCTS } from './risk';
 import type { RiskProduct } from './risk';
 import type { Settings } from './settings';
 
 let settings: Settings | null = null;
 
+const FALLBACK_ID = 'wms-risk-fallback';
 const MENU_ID = 'wms-risk-menu';
-const TITLE_CLASS = 'wms-risk-menu-title';
+const PLUGIN_NAME = 'windy-plugin-map-style';
 
 let onPick: ((product: RiskProduct) => void) | null = null;
 let onDismiss: (() => void) | null = null;
 let observer: MutationObserver | null = null;
-let timer = 0;
+let paintTimer = 0;
+let refreshTimer = 0;
 let seenOverlay: string | null = null;
 let installed = false;
+let painting = false;
+let groupsReady = false;
+let paintedSig = '';
 
 function stopsSig(): string {
     if (!settings) return '';
     return RISK_PRODUCTS.map(product => JSON.stringify(settings.risk.products[product].stops)).join('|');
+}
+
+function menuSig(): string {
+    return `${settings?.risk.active ?? ''}|${stopsSig()}|${groupsReady ? 1 : 0}`;
+}
+
+function safeColor(color: string): string {
+    return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color) ? color : '#888888';
 }
 
 function drawGlyph(context: CanvasRenderingContext2D, product: RiskProduct) {
@@ -82,28 +95,117 @@ function drawGlyph(context: CanvasRenderingContext2D, product: RiskProduct) {
 }
 
 function thumbnail(product: RiskProduct): string {
-    const canvas = document.createElement('canvas');
-    canvas.width = 170;
-    canvas.height = 128;
-    const context = canvas.getContext('2d');
-    if (!context) return '';
-    const stops = [...(settings?.risk.products[product].stops ?? [])].sort((a, b) => a.value - b.value);
-    const gradient = context.createLinearGradient(0, 0, 170, 128);
-    stops.forEach((stop, index) => {
-        const offset = stops.length === 1 ? 0 : index / (stops.length - 1);
-        gradient.addColorStop(Math.min(1, Math.max(0, offset)), stop.color);
-    });
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 170, 128);
-    drawGlyph(context, product);
-    return canvas.toDataURL('image/png');
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 170;
+        canvas.height = 128;
+        const context = canvas.getContext('2d');
+        if (!context) return '';
+        const stops = [...(settings?.risk.products[product].stops ?? defaultStops(product))]
+            .filter(stop => Number.isFinite(stop.value))
+            .sort((a, b) => a.value - b.value);
+        const gradient = context.createLinearGradient(0, 0, 170, 128);
+        const usable = stops.length ? stops : defaultStops(product);
+        usable.forEach((stop, index) => {
+            const offset = usable.length === 1 ? 0 : index / (usable.length - 1);
+            gradient.addColorStop(Math.min(1, Math.max(0, offset)), safeColor(stop.color));
+        });
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 170, 128);
+        drawGlyph(context, product);
+        if (settings?.risk.active === product) {
+            context.strokeStyle = '#ffffff';
+            context.lineWidth = 10;
+            context.strokeRect(8, 8, 154, 112);
+        }
+        return canvas.toDataURL('image/png');
+    } catch {
+        return '';
+    }
 }
 
-function categoryGrids(root: ParentNode): HTMLElement[] {
-    return [...root.querySelectorAll<HTMLElement>('.overlay-thumbnails')].filter(grid => {
-        if (grid.id === MENU_ID) return false;
-        return grid.previousElementSibling?.classList.contains('category-title') ?? false;
-    });
+function overlays(): Record<string, unknown> | null {
+    const found = (window as any).W?.overlays;
+    return found && typeof found === 'object' ? found : null;
+}
+
+function registerOverlays() {
+    const target = overlays();
+    if (!target) return;
+    for (const product of RISK_PRODUCTS) {
+        const ident = RISK_MENU_IDENTS[product];
+        target[ident] = {
+            ident,
+            icon: '',
+            getMenuName: () => RISK_LABELS[product],
+            getMenuIdent: () => ident,
+            getMenuImagePath: () => thumbnail(product),
+            onClick: () => {
+                try {
+                    onPick?.(product);
+                } catch {
+                    /* the menu click still has to finish */
+                }
+            },
+        };
+    }
+}
+
+function overlayListUrl(): string | null {
+    const scripts = [...document.scripts].map(script => script.src);
+    const fromScripts = scripts.find(src => /\/v\/[^/]+\/index\.js(?:\?|$)/.test(src));
+    const fromResources = performance
+        .getEntriesByType('resource')
+        .map(entry => entry.name)
+        .find(src => /\/v\/[^/]+\/index\.js(?:\?|$)/.test(src));
+    const core = fromScripts || fromResources;
+    if (!core) return null;
+    return core.replace(/index\.js(\?.*)?$/, 'plugins/_shared-overlay-list.js');
+}
+
+async function attachGroups() {
+    registerOverlays();
+    const url = overlayListUrl();
+    if (!url) return;
+    const mod = await import(/* @vite-ignore */ url);
+    if (Array.isArray(mod?.t?.rain)) addRiskIdents(mod.t.rain);
+    if (Array.isArray(mod?.n?.rain)) addRiskIdents(mod.n.rain);
+        groupsReady = true;
+        scheduleRefresh();
+        schedulePaint();
+    }
+
+function nudge(key: string) {
+    const current = store.get(key);
+    if (!Array.isArray(current) || typeof (store as { set?: (k: string, v: unknown) => void }).set !== 'function') return;
+    (store as { set: (k: string, v: unknown) => void }).set(key, current.slice());
+}
+
+function scheduleRefresh() {
+    window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(() => {
+        try {
+            const sig = menuSig();
+            if (sig === paintedSig) return;
+            paintedSig = sig;
+            nudge('favOverlaysDesktop');
+            nudge('favOverlaysMobile');
+        } catch {
+            /* the tiles still appear the next time the menu is created */
+        }
+    }, 30);
+}
+
+function ensureStyle() {
+    const id = 'wms-risk-menu-style';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = [
+        '#wms-risk-fallback .wms-risk-item{height:auto;min-height:95px;color:inherit;cursor:pointer}',
+        '#wms-risk-fallback .wms-risk-item .rounded-box{border-radius:8px}',
+    ].join('');
+    document.head.appendChild(style);
 }
 
 function markSelected(grid: HTMLElement) {
@@ -119,11 +221,11 @@ function fillGrid(grid: HTMLElement) {
     grid.replaceChildren();
     grid.dataset.stops = stopsSig();
     for (const product of RISK_PRODUCTS) {
-        const item = document.createElement('div');
+        const item = document.createElement('a');
         item.className = 'overlay-item wms-risk-item';
         item.dataset.product = product;
+        item.href = '#';
         item.setAttribute('role', 'button');
-        item.tabIndex = 0;
         const box = document.createElement('div');
         box.className = 'rounded-box';
         const image = thumbnail(product);
@@ -136,76 +238,110 @@ function fillGrid(grid: HTMLElement) {
             event.preventDefault();
             event.stopPropagation();
             choose();
+            markSelected(grid);
         });
         item.addEventListener('keydown', event => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
             choose();
+            markSelected(grid);
         });
         grid.append(item);
     }
     markSelected(grid);
 }
 
-function ensureStyle() {
-    const id = 'wms-risk-menu-style';
-    if (document.getElementById(id)) return;
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = [
-        '.wms-risk-menu-title{margin:18px 0 8px 5px;font-size:13px;letter-spacing:.02em;opacity:.8}',
-        '.overlay-thumbnails .wms-risk-item{height:auto;min-height:95px;color:inherit}',
-        '.overlay-thumbnails .wms-risk-item .rounded-box{border-radius:8px}',
-    ].join('');
-    document.head.appendChild(style);
+function hasOfficial(root: ParentNode): boolean {
+    const hit = root.querySelector(`[data-ident="${RISK_MENU_IDENTS.convective}"]`);
+    return Boolean(hit && !hit.closest(`#${FALLBACK_ID}`));
 }
 
-/** Put the Risk category under Rain, snow in Windy's layer menu. */
-export function syncRiskMenu() {
-    if (!installed) return;
-    const root = document.querySelector('.menu-items-desktop');
-    if (!root) return;
-    const grids = categoryGrids(root);
-    const rain = grids.find(grid => grid.querySelector('[data-ident="rain"]')) ?? grids.at(-1);
-    if (!rain?.parentElement) return;
-    ensureStyle();
-    let title = root.querySelector<HTMLElement>(`.${TITLE_CLASS}`);
-    let grid = root.querySelector<HTMLElement>(`#${MENU_ID}`);
-    const placed = title && grid && rain.nextElementSibling === title && title.nextElementSibling === grid;
-    if (!placed) {
-        title?.remove();
-        grid?.remove();
-        title = document.createElement('div');
-        title.className = `category-title disabled inlined mb-10 ml-5 size-xs mt-20 ${TITLE_CLASS}`;
-        title.textContent = 'Risk';
-        grid = document.createElement('div');
-        grid.id = MENU_ID;
-        grid.className = 'overlay-thumbnails';
-        rain.insertAdjacentElement('afterend', grid);
-        grid.insertAdjacentElement('beforebegin', title);
-        fillGrid(grid);
+/**
+ * The layer list is a Svelte each-block. Nodes inserted between its categories get
+ * removed, and removing them from here used to abort the plugin while it was opening.
+ * This block is appended after that list, and only while the real tiles are absent.
+ */
+function ensureFallback(root: HTMLElement) {
+    if (hasOfficial(root)) {
+        document.getElementById(FALLBACK_ID)?.remove();
         return;
     }
+    ensureStyle();
+    let block = document.getElementById(FALLBACK_ID);
+    if (!block) {
+        block = document.createElement('div');
+        block.id = FALLBACK_ID;
+        const title = document.createElement('div');
+        title.className = 'category-title disabled inlined mb-10 ml-5 size-xs mt-20';
+        title.textContent = 'Risk';
+        const grid = document.createElement('div');
+        grid.id = MENU_ID;
+        grid.className = 'overlay-thumbnails';
+        block.append(title, grid);
+        fillGrid(grid);
+        root.appendChild(block);
+        return;
+    }
+    const grid = block.querySelector<HTMLElement>(`#${MENU_ID}`);
+    if (!grid) return;
     if (grid.dataset.stops !== stopsSig()) fillGrid(grid);
     else markSelected(grid);
 }
 
-function menuWasTouched(records: MutationRecord[]): boolean {
-    for (const record of records) {
-        const target = record.target;
-        if (target instanceof Element && target.closest('.menu-items-desktop')) return true;
-        for (const node of record.addedNodes) {
-            if (!(node instanceof Element)) continue;
-            if (node.classList.contains('menu-items-desktop') || node.querySelector('.menu-items-desktop')) return true;
-        }
+/** Windy only listens on the words "Map style", not the palette icon. */
+function widenMapStyleHitTarget() {
+    for (const title of document.querySelectorAll<HTMLElement>('.title')) {
+        if (title.textContent?.trim() !== 'Map style') continue;
+        const row = title.closest('a');
+        if (!row || row.dataset.wmsHit === '1') continue;
+        row.dataset.wmsHit = '1';
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', event => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            if (target.closest('.title')) return;
+            if (target.closest('[data-tooltip]')) return;
+            event.preventDefault();
+            try {
+                (window as any).W?.broadcast?.emit?.('rqstOpen', PLUGIN_NAME);
+            } catch {
+                /* the title click is unchanged */
+            }
+        });
     }
-    return false;
 }
 
-function scheduleSync(records: MutationRecord[]) {
-    if (!menuWasTouched(records)) return;
-    window.clearTimeout(timer);
-    timer = window.setTimeout(syncRiskMenu, 60);
+function paintMenu() {
+    if (painting) return;
+    painting = true;
+    try {
+        widenMapStyleHitTarget();
+        const root = document.querySelector<HTMLElement>('.menu-items-desktop');
+        if (root) ensureFallback(root);
+    } catch {
+        /* opening the plugin must not depend on the menu */
+    } finally {
+        painting = false;
+    }
+}
+
+function schedulePaint() {
+    window.clearTimeout(paintTimer);
+    paintTimer = window.setTimeout(paintMenu, 30);
+}
+
+function menuWasTouched(record: MutationRecord): boolean {
+    const target = record.target;
+    if (target instanceof Element) {
+        if (target.closest(`#${FALLBACK_ID}`)) return false;
+        if (target.closest('.menu-items-desktop, .menu-top')) return true;
+    }
+    for (const node of record.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.id === FALLBACK_ID) continue;
+        if (node.matches('.menu-items-desktop, .menu-top') || node.querySelector('.menu-items-desktop, .menu-top')) return true;
+    }
+    return false;
 }
 
 function onOverlay(next: unknown) {
@@ -219,23 +355,44 @@ function onOverlay(next: unknown) {
     if (settings?.risk.active) onDismiss?.();
 }
 
-/** Keep the category in place for the rest of the visit. Closing the plugin pane does not remove it. */
+/** Keep the products in the layer menu for the rest of the visit. Closing this pane does not remove them. */
 export function installRiskMenu(source: Settings, pick: (product: RiskProduct) => void, dismiss: () => void) {
     settings = source;
     onPick = pick;
     onDismiss = dismiss;
-    if (installed) {
-        syncRiskMenu();
-        return;
-    }
-    installed = true;
     try {
-        seenOverlay = String(store.get('overlay') ?? '');
-        store.on('overlay', onOverlay);
+        if (!installed) {
+            installed = true;
+            try {
+                seenOverlay = String(store.get('overlay') ?? '');
+                store.on('overlay', onOverlay);
+            } catch {
+                seenOverlay = '';
+            }
+            observer = new MutationObserver(records => {
+                if (records.some(menuWasTouched)) schedulePaint();
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+        registerOverlays();
+        void attachGroups().catch(() => {
+            /* the fallback block still lists the products */
+        });
     } catch {
-        seenOverlay = '';
+        /* the pane still opens */
     }
-    observer = new MutationObserver(scheduleSync);
-    observer.observe(document.body, { childList: true, subtree: true });
-    syncRiskMenu();
+    schedulePaint();
+}
+
+/** Called after settings change. Safe to call while the layer menu is open. */
+export function syncRiskMenu() {
+    try {
+        registerOverlays();
+    } catch {
+        /* the pane still updates */
+    }
+    schedulePaint();
+    const sig = menuSig();
+    if (sig === paintedSig) return;
+    scheduleRefresh();
 }

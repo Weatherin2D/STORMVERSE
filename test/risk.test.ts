@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+    addRiskIdents,
     colorizePixels,
     decodePixel,
     encodingMax,
     formatRiskValue,
     hailFromMillimetres,
     parseScale,
+    RISK_MENU_IDENTS,
+    RISK_PRODUCTS,
     riskTileUrl,
     sampleScale,
 } from '../src/risk.ts';
@@ -74,6 +77,14 @@ test('hail size stays in millimetres until it is shown', () => {
     assert.equal(formatRiskValue('tornado', 12.36, 'mm'), '12.4%');
     assert.equal(formatRiskValue('hailSize', 25.4, 'cm'), '2.5 cm');
     assert.equal(formatRiskValue('hailSize', 25.4, 'in'), '1.0 in');
+});
+
+test('risk products are added once to the end of a layer group', () => {
+    const rain = ['rain', 'thunder'];
+    addRiskIdents(rain);
+    addRiskIdents(rain);
+    assert.deepEqual(rain, ['rain', 'thunder', ...RISK_PRODUCTS.map(product => RISK_MENU_IDENTS[product])]);
+    assert.equal(rain.filter(ident => ident === 'wms-thunder').length, 1);
 });
 
 test('a tile address fills the zoom and wraps the x column', () => {
