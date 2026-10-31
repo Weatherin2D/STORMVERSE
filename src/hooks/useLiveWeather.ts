@@ -4,29 +4,35 @@ import { RAINVIEWER } from '../config/weather'
 import {
   australianWeatherProvider,
   fetchOpenMeteoEnvironment,
-  type EnvironmentalSample,
   type RadarObservation,
   type SatelliteObservation,
+  type StormTrack,
   type WeatherObservationMeta,
 } from '../weather'
+import type { EnvironmentalProfile } from '../weather/adapters/OpenMeteoAdapter'
+import { deriveTracksFromRadarFrames } from '../weather/reconstruction/deriveTracks'
 
 export interface LiveWeatherState {
   loading: boolean
+  tracksLoading: boolean
   error: string | null
   availability: WeatherObservationMeta[]
   radarFrames: RadarObservation[]
   satelliteFrames: SatelliteObservation[]
-  environment: EnvironmentalSample | null
+  environment: EnvironmentalProfile | null
+  tracks: StormTrack[]
   refresh: () => void
 }
 
-export function useLiveWeather(): LiveWeatherState {
+export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [loading, setLoading] = useState(true)
+  const [tracksLoading, setTracksLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [availability, setAvailability] = useState<WeatherObservationMeta[]>([])
   const [radarFrames, setRadarFrames] = useState<RadarObservation[]>([])
   const [satelliteFrames, setSatelliteFrames] = useState<SatelliteObservation[]>([])
-  const [environment, setEnvironment] = useState<EnvironmentalSample | null>(null)
+  const [environment, setEnvironment] = useState<EnvironmentalProfile | null>(null)
+  const [tracks, setTracks] = useState<StormTrack[]>([])
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -47,8 +53,9 @@ export function useLiveWeather(): LiveWeatherState {
           ),
         ])
         if (cancelled) return
+        const radarOk = radar.filter((f) => f.available && f.tileUrlTemplate)
         setAvailability(avail)
-        setRadarFrames(radar.filter((f) => f.available && f.tileUrlTemplate))
+        setRadarFrames(radarOk)
         setSatelliteFrames(satellite.filter((f) => f.available && f.tileUrlTemplate))
         setEnvironment(env)
         setError(null)
@@ -67,17 +74,90 @@ export function useLiveWeather(): LiveWeatherState {
   }, [tick])
 
   useEffect(() => {
+    if (!enableTracks) {
+      setTracks([])
+      setTracksLoading(false)
+      return
+    }
+    if (radarFrames.length < 2) return
+
+    const controller = new AbortController()
+    let cancelled = false
+    setTracksLoading(true)
+
+    deriveTracksFromRadarFrames(radarFrames, australianWeatherProvider.id, {
+      frameLimit: 4,
+      signal: controller.signal,
+    })
+      .then((derived) => {
+        if (cancelled) return
+        setTracks(derived)
+        setAvailability((prev) => {
+          const without = prev.filter((p) => p.id !== 'aus-storm-track')
+          if (derived.length === 0) {
+            return [
+              ...without,
+              {
+                id: 'aus-storm-track',
+                productType: 'storm_track',
+                sourceId: australianWeatherProvider.id,
+                observedAt: new Date().toISOString(),
+                available: false,
+                provenance: {
+                  kind: 'derived',
+                  summary:
+                    'No multi-frame cell links found in the latest mosaics (or precip was too sparse).',
+                  sourceId: australianWeatherProvider.id,
+                },
+              },
+            ]
+          }
+          return [
+            ...without,
+            {
+              id: 'aus-storm-track',
+              productType: 'storm_track',
+              sourceId: australianWeatherProvider.id,
+              observedAt: derived[0].observedAt,
+              available: true,
+              provenance: {
+                kind: 'derived',
+                summary: `Derived ${derived.length} heuristic cell track(s) from RainViewer mosaics.`,
+                sourceId: australianWeatherProvider.id,
+              },
+            },
+          ]
+        })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.warn('Cell track derivation failed', err)
+        setTracks([])
+      })
+      .finally(() => {
+        if (!cancelled) setTracksLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [enableTracks, radarFrames])
+
+  useEffect(() => {
     const id = window.setInterval(() => setTick((n) => n + 1), RAINVIEWER.refreshMs)
     return () => window.clearInterval(id)
   }, [])
 
   return {
     loading,
+    tracksLoading,
     error,
     availability,
     radarFrames,
     satelliteFrames,
     environment,
+    tracks,
     refresh: () => setTick((n) => n + 1),
   }
 }

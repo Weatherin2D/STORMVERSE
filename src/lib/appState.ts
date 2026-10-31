@@ -13,6 +13,8 @@ export interface LayerState {
   radar: boolean
   /** Globe infrared satellite mosaic when available. */
   satellite: boolean
+  /** Derived storm-cell tracks from radar mosaics. */
+  tracks: boolean
 }
 
 export interface TimelineState {
@@ -51,6 +53,7 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       precipitation: true,
       radar: true,
       satellite: false,
+      tracks: true,
     },
     cloudParams: { ...CLOUD_DEFAULTS },
     flashFreq: 0.35,

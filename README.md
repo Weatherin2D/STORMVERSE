@@ -16,77 +16,51 @@ npm run build
 npm run preview
 ```
 
-### Optional Cesium Ion token
-
-Copy `.env.example` to `.env` and set:
-
-```bash
-VITE_CESIUM_ION_TOKEN=your_token_here
-```
-
-Without a token, the globe uses OpenStreetMap tiles.
+Optional Cesium Ion token: copy `.env.example` → `.env` and set `VITE_CESIUM_ION_TOKEN`.
 
 ## Milestone status
 
 ### Milestone 1 — Visual prototype
+Interactive Cesium Earth, ray-marched synthetic thunderstorm, lighting, lightning FX, timeline, typed weather interfaces.
 
-- Interactive Cesium Earth
-- Ray-marched prototype thunderstorm (synthetic)
-- Day / sunset / night lighting, lightning, precip shafts
-- Camera presets, layer toggles, prototype timeline
-- Typed weather provider interfaces
+### Milestone 2 — Live observation overlays
+RainViewer radar mosaics on the globe, observation-time timeline, optional IR satellite, Open-Meteo site context. 3D storm remains synthetic.
 
-### Milestone 2 — Live Australian-focused observations (current)
-
-- **RainViewer public API** radar reflectivity mosaics on the globe (processed imagery)
-- Timeline scrubbing of real radar frame times
-- Infrared satellite overlay when the RainViewer catalog publishes frames
-- **Open-Meteo** model environmental context at the prototype site (labelled as model, not observation)
-- Clear provenance for every product; lightning + storm tracks remain unavailable from this feed
-- 3D storm scene stays a **synthetic reconstruction** — not derived from the radar tiles
+### Milestone 3 — Derived tracks + scientific context (current)
+- **Heuristic cell tracks** derived in-browser from RainViewer Australia tiles (colour sampling + nearest-neighbour linking)
+- Tracks drawn on the globe with confidence labels; selectable in the info panel
+- **CAPE / CIN** from Open-Meteo hourly model fields
+- **Schematic vertical cross-section** shaped by model CAPE/CIN and selected track confidence — clearly labelled as reconstruction, not radar RHI
+- Provenance updated for derived vs processed vs model vs synthetic products
 
 ## Scientific integrity
 
 | Visual | Interpretation |
 | --- | --- |
-| Globe radar mosaic | Processed composite imagery via RainViewer — not a BoM volume product |
-| Satellite IR (when available) | Processed mosaic via RainViewer |
-| Open-Meteo panel fields | Numerical model / forecast context |
-| 3D clouds, bolts, rain shafts | Synthetic / procedural demonstration |
-| Prototype storm marker | Demonstration target, not a tracked storm cell |
+| Globe radar mosaic | Processed composite imagery via RainViewer |
+| Cell tracks | **Derived** heuristic from mosaic colours — low confidence |
+| CAPE / CIN / site weather | Numerical model (Open-Meteo) |
+| Cross-section diagram | Schematic reconstruction aid |
+| 3D clouds / bolts / shafts | Synthetic demonstration |
+| Prototype storm marker | Demonstration target |
 
 ## Known limitations
 
-- No BoM direct radar volumes, no licensed lightning network, no automated cell tracks
-- RainViewer frames are global composites; colour scale is relative, not calibrated dBZ grids
-- Satellite IR may be empty depending on catalog contents
-- Storm 3D scene is not georegistered onto the Cesium globe
-- Dual-renderer depth sync is deferred
+- No licensed lightning network; no official BoM cell product
+- Tracks can be empty when mosaics show little precip over Australia
+- Colour-based intensity is not calibrated dBZ
+- Cross-section is not a measured vertical radar slice
+- 3D storm is not georegistered to a derived cell
 
 ## Next milestone ideas
 
-1. Licensed Australian lightning events mapped onto globe + storm illumination
-2. Radar-derived storm-cell tracks (documented algorithm + confidence)
-3. Optional BoM or commercial radar volume / cross-section products under proper licensing
-4. Drive reconstruction parameters from observed products where scientifically justified
+1. Licensed Australian lightning events on globe + storm illumination
+2. Optional licensed radar volume / RHI products
+3. Improve cell tracking (multi-scale, optical flow) with documented skill scores
+4. Drive 3D reconstruction parameters from a selected derived cell when justified
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
 ## Stack
 
-- Vite + React 18 + TypeScript
-- CesiumJS — Earth + observation overlays
-- Three.js — storm volume rendering
-- RainViewer + Open-Meteo — public weather feeds
-
-## Project layout
-
-```text
-src/
-  components/     # UI: globe, storm, controls, panels, timeline
-  rendering/      # Cesium globe, cloud volume, lightning, precip, atmosphere
-  weather/        # Typed observations + RainViewer / Open-Meteo / prototype adapters
-  config/         # App + weather endpoint configuration
-  hooks/          # Live weather + a11y hooks
-  lib/            # App state helpers
-```
+Vite · React · TypeScript · CesiumJS · Three.js · RainViewer · Open-Meteo

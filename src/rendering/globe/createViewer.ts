@@ -19,7 +19,11 @@ import {
   createWorldTerrainAsync,
 } from 'cesium'
 import { PROTOTYPE_STORM } from '../../config/app'
-import type { RadarObservation, SatelliteObservation } from '../../weather/types/observations'
+import type {
+  RadarObservation,
+  SatelliteObservation,
+  StormTrack,
+} from '../../weather/types/observations'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 export interface GlobePick {
@@ -36,6 +40,8 @@ export interface StormverseGlobe {
   setRadarVisible: (visible: boolean) => void
   setSatelliteFrame: (frame: SatelliteObservation | null) => void
   setSatelliteVisible: (visible: boolean) => void
+  setTracks: (tracks: StormTrack[], selectedId?: string | null) => void
+  setTracksVisible: (visible: boolean) => void
   destroy: () => void
 }
 
@@ -43,6 +49,7 @@ export async function createStormverseGlobe(
   container: HTMLElement,
   options: {
     onStormSelect?: () => void
+    onTrackSelect?: (trackId: string) => void
     onPick?: (pick: GlobePick) => void
   } = {},
 ): Promise<StormverseGlobe> {
@@ -250,17 +257,101 @@ export async function createStormverseGlobe(
     description: PROTOTYPE_STORM.description,
   })
 
+  const trackEntityIds = new Set<string>()
+  let tracksVisible = true
+
+  const clearTracks = () => {
+    for (const id of trackEntityIds) {
+      viewer.entities.removeById(id)
+    }
+    trackEntityIds.clear()
+  }
+
+  const setTracks = (tracks: StormTrack[], selectedId: string | null = null) => {
+    clearTracks()
+    if (!tracksVisible) return
+    for (const track of tracks) {
+      if (!track.available || track.points.length < 2) continue
+      const positions = track.points.map((p) =>
+        Cartesian3.fromDegrees(p.longitude, p.latitude, 8000),
+      )
+      const selected = track.id === selectedId
+      const lineId = `track-line-${track.id}`
+      const head = track.points[track.points.length - 1]
+      const headId = `track-head-${track.id}`
+      viewer.entities.add({
+        id: lineId,
+        name: track.stormId,
+        polyline: {
+          positions,
+          width: selected ? 4 : 2.5,
+          material: Color.fromCssColorString(selected ? '#f0c56d' : '#7eb6ff').withAlpha(
+            selected ? 0.95 : 0.75,
+          ),
+          clampToGround: false,
+        },
+        properties: { trackId: track.id },
+      })
+      viewer.entities.add({
+        id: headId,
+        position: Cartesian3.fromDegrees(head.longitude, head.latitude, 9000),
+        point: {
+          pixelSize: selected ? 12 : 8,
+          color: Color.fromCssColorString(selected ? '#f0c56d' : '#9ec5ff'),
+          outlineColor: Color.BLACK.withAlpha(0.5),
+          outlineWidth: 1,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: `Derived cell · conf ${Math.round((track.confidence ?? 0) * 100)}%`,
+          font: '11px "IBM Plex Sans", system-ui, sans-serif',
+          fillColor: Color.WHITE,
+          showBackground: true,
+          backgroundColor: Color.fromCssColorString('#0b1220').withAlpha(0.7),
+          pixelOffset: new Cartesian2(0, -18),
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scale: selected ? 1 : 0.9,
+        },
+        properties: { trackId: track.id },
+      })
+      trackEntityIds.add(lineId)
+      trackEntityIds.add(headId)
+    }
+    viewer.scene.requestRender()
+  }
+
+  const setTracksVisible = (visible: boolean) => {
+    tracksVisible = visible
+    for (const id of trackEntityIds) {
+      const ent = viewer.entities.getById(id)
+      if (ent) ent.show = visible
+    }
+    viewer.scene.requestRender()
+  }
+
   const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
   handler.setInputAction((movement: { position: Cartesian2 }) => {
     const picked = viewer.scene.pick(movement.position)
-    if (
-      picked &&
-      typeof picked === 'object' &&
-      'id' in picked &&
-      (picked as { id?: { id?: string } }).id?.id === PROTOTYPE_STORM.id
-    ) {
-      options.onStormSelect?.()
-      return
+    if (picked && typeof picked === 'object' && 'id' in picked) {
+      const entity = (picked as { id?: { id?: string; properties?: { trackId?: { getValue?: () => string } } } }).id
+      const entityId = entity?.id
+      if (entityId === PROTOTYPE_STORM.id) {
+        options.onStormSelect?.()
+        return
+      }
+      const trackProp = entity?.properties?.trackId
+      const trackId =
+        typeof trackProp?.getValue === 'function' ? trackProp.getValue() : undefined
+      if (trackId) {
+        options.onTrackSelect?.(trackId)
+        return
+      }
+      // Fallback: parse from entity id
+      if (entityId?.startsWith('track-head-') || entityId?.startsWith('track-line-')) {
+        options.onTrackSelect?.(entityId.replace(/^track-(head|line)-/, ''))
+        return
+      }
     }
     const cartesian = viewer.camera.pickEllipsoid(
       movement.position,
@@ -321,7 +412,10 @@ export async function createStormverseGlobe(
     setRadarVisible,
     setSatelliteFrame,
     setSatelliteVisible,
+    setTracks,
+    setTracksVisible,
     destroy: () => {
+      clearTracks()
       handler.destroy()
       if (!viewer.isDestroyed()) viewer.destroy()
     },

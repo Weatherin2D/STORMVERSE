@@ -399,6 +399,86 @@ button {
   color: var(--text-dim);
 }
 
+.track-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.track-list button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.track-list button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.track-list button span {
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cross-section {
+  margin: 12px 0 14px;
+}
+
+.cross-section h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.cross-section svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cross-section .guide {
+  stroke: rgba(232, 236, 245, 0.12);
+  stroke-width: 1;
+}
+
+.cross-section .guide-label {
+  fill: rgba(154, 166, 188, 0.9);
+  font-size: 8px;
+  font-family: var(--mono);
+}
+
+.cross-section .ground {
+  fill: rgba(40, 48, 40, 0.9);
+}
+
+.cross-section .cloud-core,
+.cross-section .cloud-anvil,
+.cross-section .cloud-base {
+  fill: rgba(210, 220, 235, 0.55);
+  stroke: rgba(245, 248, 255, 0.35);
+  stroke-width: 1;
+}
+
+.cross-section .precip line {
+  stroke: rgba(150, 175, 200, 0.55);
+  stroke-width: 1.5;
+}
+
 @media (max-width: 900px) {
   .status-line {
     top: auto;

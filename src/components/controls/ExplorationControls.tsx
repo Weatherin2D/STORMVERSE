@@ -11,6 +11,7 @@ interface ExplorationControlsProps {
   debugOpen: boolean
   cloudParams: CloudParams
   satelliteAvailable: boolean
+  tracksLoading: boolean
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -40,6 +41,7 @@ export function ExplorationControls({
   debugOpen,
   cloudParams,
   satelliteAvailable,
+  tracksLoading,
   onLightingMode,
   onLayers,
   onPreset,
@@ -90,6 +92,14 @@ export function ExplorationControls({
             onClick={() => onLayers({ satellite: !layers.satellite })}
           >
             Satellite IR
+          </button>
+          <button
+            type="button"
+            className={layers.tracks ? 'active' : ''}
+            title="Derived cell tracks from radar mosaics (low confidence)"
+            onClick={() => onLayers({ tracks: !layers.tracks })}
+          >
+            {tracksLoading ? 'Tracks…' : 'Cell tracks'}
           </button>
           <button type="button" onClick={onRefreshWeather}>
             Refresh data

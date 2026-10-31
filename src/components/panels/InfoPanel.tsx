@@ -1,19 +1,25 @@
 import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
-import type { EnvironmentalSample, WeatherObservationMeta } from '../../weather'
+import type { StormTrack, WeatherObservationMeta } from '../../weather'
+import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapter'
 import { australianWeatherProvider } from '../../weather'
+import { CrossSection } from '../scientific/CrossSection'
 
 interface InfoPanelProps {
   open: boolean
   viewMode: ViewMode
   availability: WeatherObservationMeta[]
-  environment: EnvironmentalSample | null
+  environment: EnvironmentalProfile | null
+  tracks: StormTrack[]
+  selectedTrackId: string | null
   radarLabel: string | null
+  tracksLoading: boolean
   loading: boolean
   error: string | null
   onClose: () => void
   onEnterStorm: () => void
   onReturnGlobe: () => void
+  onSelectTrack: (trackId: string) => void
 }
 
 export function InfoPanel({
@@ -21,14 +27,19 @@ export function InfoPanel({
   viewMode,
   availability,
   environment,
+  tracks,
+  selectedTrackId,
   radarLabel,
+  tracksLoading,
   loading,
   error,
   onClose,
   onEnterStorm,
   onReturnGlobe,
+  onSelectTrack,
 }: InfoPanelProps) {
   if (!open) return null
+  const selected = tracks.find((t) => t.id === selectedTrackId) ?? null
 
   return (
     <aside className="info-panel" aria-label="Storm information">
@@ -45,14 +56,15 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Live radar mosaics for the Australia region are overlaid from the public RainViewer
-            catalog. Select the prototype storm marker to enter the synthetic 3D reconstruction —
-            clouds there are not derived from the radar tiles.
+            Live RainViewer mosaics plus heuristic cell tracks derived in-browser from those
+            tiles. Tracks are low-confidence estimates — not official storm-cell products. The
+            prototype marker still opens a synthetic 3D reconstruction.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
           </p>
           {error && <p className="provenance">{error}</p>}
+
           <div className="availability">
             <h3>Observation feeds</h3>
             <ul>
@@ -66,6 +78,39 @@ export function InfoPanel({
               ))}
             </ul>
           </div>
+
+          <div className="availability">
+            <h3>Derived cell tracks {tracksLoading ? '(computing…)' : ''}</h3>
+            {tracks.length === 0 ? (
+              <p className="provenance">
+                {tracksLoading
+                  ? 'Sampling radar tiles over Australia…'
+                  : 'No linked multi-frame cells yet — try when more precip is present.'}
+              </p>
+            ) : (
+              <ul className="track-list">
+                {tracks.map((t) => (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      className={t.id === selectedTrackId ? 'active' : ''}
+                      onClick={() => onSelectTrack(t.id)}
+                    >
+                      {t.stormId}
+                      <span>
+                        {t.points.length} pts · conf {Math.round((t.confidence ?? 0) * 100)}%
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="provenance">
+              <strong>Provenance:</strong> derived from RainViewer mosaic colour samples with
+              nearest-neighbour linking.
+            </p>
+          </div>
+
           {environment && (
             <div className="availability">
               <h3>Environment at prototype site</h3>
@@ -80,19 +125,15 @@ export function InfoPanel({
                     <dd>{environment.relativeHumidityPct ?? '—'}%</dd>
                   </div>
                   <div>
-                    <dt>Wind</dt>
+                    <dt>CAPE</dt>
                     <dd>
-                      {environment.windSpeedMps != null
-                        ? `${environment.windSpeedMps.toFixed(1)} m/s`
-                        : '—'}
+                      {environment.capeJkg != null ? `${Math.round(environment.capeJkg)} J/kg` : '—'}
                     </dd>
                   </div>
                   <div>
-                    <dt>Precip (model)</dt>
+                    <dt>CIN</dt>
                     <dd>
-                      {environment.precipitationMm != null
-                        ? `${environment.precipitationMm.toFixed(1)} mm`
-                        : '—'}
+                      {environment.cinJkg != null ? `${Math.round(environment.cinJkg)} J/kg` : '—'}
                     </dd>
                   </div>
                 </dl>
@@ -104,9 +145,16 @@ export function InfoPanel({
               </p>
             </div>
           )}
+
+          <CrossSection
+            environment={environment}
+            selectedTrack={selected}
+            radarIntensityHint={selected?.confidence ?? 0.35}
+          />
+
           <p className="provenance">
-            <strong>Provider:</strong> {australianWeatherProvider.displayName}. Lightning and
-            automated storm tracks are not included in this feed.
+            <strong>Provider:</strong> {australianWeatherProvider.displayName}. Detected lightning
+            remains unavailable from this feed.
           </p>
           <button type="button" className="primary" onClick={onEnterStorm}>
             Approach prototype storm
@@ -135,19 +183,11 @@ export function InfoPanel({
               <dd>Visual shafts only — not measured rainfall</dd>
             </div>
           </dl>
-          <div className="availability">
-            <h3>Data availability</h3>
-            <ul>
-              {availability.map((item) => (
-                <li key={item.id}>
-                  <span>{item.productType.split('_').join(' ')}</span>
-                  <span className={item.available ? 'ok' : 'missing'}>
-                    {item.available ? item.provenance.kind : 'unavailable'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <CrossSection
+            environment={environment}
+            selectedTrack={selected}
+            radarIntensityHint={0.55}
+          />
           <button type="button" onClick={onReturnGlobe}>
             Return to Earth
           </button>

@@ -3,32 +3,42 @@ import {
   createStormverseGlobe,
   type StormverseGlobe,
 } from '../../rendering/globe/createViewer'
-import type { RadarObservation, SatelliteObservation } from '../../weather'
+import type { RadarObservation, SatelliteObservation, StormTrack } from '../../weather'
 
 interface GlobeViewProps {
   active: boolean
   requestFlyToStorm: number
   requestFlyHome: number
   onEnterStorm: () => void
+  onTrackSelect: (trackId: string) => void
   radarFrame: RadarObservation | null
   satelliteFrame: SatelliteObservation | null
   radarVisible: boolean
   satelliteVisible: boolean
+  tracks: StormTrack[]
+  tracksVisible: boolean
+  selectedTrackId: string | null
 }
 
 export function GlobeView({
   requestFlyToStorm,
   requestFlyHome,
   onEnterStorm,
+  onTrackSelect,
   radarFrame,
   satelliteFrame,
   radarVisible,
   satelliteVisible,
+  tracks,
+  tracksVisible,
+  selectedTrackId,
 }: GlobeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<StormverseGlobe | null>(null)
   const onEnterRef = useRef(onEnterStorm)
+  const onTrackRef = useRef(onTrackSelect)
   onEnterRef.current = onEnterStorm
+  onTrackRef.current = onTrackSelect
 
   useEffect(() => {
     const el = containerRef.current
@@ -37,6 +47,7 @@ export function GlobeView({
 
     createStormverseGlobe(el, {
       onStormSelect: () => onEnterRef.current(),
+      onTrackSelect: (id) => onTrackRef.current(id),
     })
       .then((globe) => {
         if (cancelled) {
@@ -46,8 +57,10 @@ export function GlobeView({
         globeRef.current = globe
         globe.setRadarVisible(radarVisible)
         globe.setSatelliteVisible(satelliteVisible)
+        globe.setTracksVisible(tracksVisible)
         if (radarFrame) globe.setRadarFrame(radarFrame)
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
+        globe.setTracks(tracks, selectedTrackId)
       })
       .catch((err) => {
         console.error('Failed to initialise Cesium globe', err)
@@ -58,7 +71,6 @@ export function GlobeView({
       globeRef.current?.destroy()
       globeRef.current = null
     }
-    // Mount once; layer updates flow through later effects.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -87,6 +99,14 @@ export function GlobeView({
   useEffect(() => {
     globeRef.current?.setSatelliteVisible(satelliteVisible)
   }, [satelliteVisible])
+
+  useEffect(() => {
+    globeRef.current?.setTracks(tracks, selectedTrackId)
+  }, [tracks, selectedTrackId])
+
+  useEffect(() => {
+    globeRef.current?.setTracksVisible(tracksVisible)
+  }, [tracksVisible])
 
   return <div ref={containerRef} className="viewport-layer globe-layer" />
 }
