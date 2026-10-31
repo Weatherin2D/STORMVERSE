@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
@@ -10,7 +12,10 @@ import rollupCleanup from 'rollup-plugin-cleanup';
 import { less } from 'svelte-preprocess-less';
 import sveltePreprocess from 'svelte-preprocess';
 
-import { transformCodeToESMPlugin, keyPEM, certificatePEM } from '@windycom/plugin-devtools';
+import { transformCodeToESMPlugin } from '@windycom/plugin-devtools';
+
+const localhostKey = readFileSync(new URL('./certs/localhost-key.pem', import.meta.url));
+const localhostCert = readFileSync(new URL('./certs/localhost.pem', import.meta.url));
 
 const useSourceMaps = true;
 
@@ -111,8 +116,8 @@ export default {
                     'Access-Control-Allow-Origin': '*',
                 },
                 https: {
-                    key: keyPEM,
-                    cert: certificatePEM,
+                    key: localhostKey,
+                    cert: localhostCert,
                 },
             }),
     ],

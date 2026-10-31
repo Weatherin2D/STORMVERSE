@@ -23,6 +23,6 @@ Then open <https://www.windy.com/developer-mode> and load:
 https://localhost:9999/plugin.js
 ```
 
-The dev server uses the certificate from `@windycom/plugin-devtools`. Accept it in the browser if you are asked to.
+The dev server uses a self-signed certificate for `localhost`. The first time you open the plugin URL, the browser warns you. Choose **Advanced**, then **Proceed to localhost**. If that link is not there, click the warning page and type `thisisunsafe`.
 
 `npm test` checks the recolour rules. `npm run build` writes `dist/plugin.js`.
