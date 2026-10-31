@@ -1,4 +1,4 @@
-import { map, toggleLandSeaMaskColored } from '@windy/map';
+import { isGlobeActive, map, toggleLandSeaMaskColored } from '@windy/map';
 import {
     fragmentForBackground,
     hexToRgb,
@@ -737,13 +737,19 @@ function layerSignature(): string {
         .join('|');
 }
 
+const RISK_PANE = 'wmsRisk';
+const RISK_TILE = 256;
+
 let riskLayer: any = null;
+let riskRoot: HTMLDivElement | null = null;
 let riskSig = '';
 let riskWanted = false;
 let riskPointer: ((text: string) => void) | null = null;
 let riskNotice: ((text: string) => void) | null = null;
 let riskMoveBound = false;
+let riskViewBound = false;
 let riskTileWarned = false;
+let riskGeneration = 0;
 
 export function watchRiskPointer(cb: (text: string) => void): () => void {
     riskPointer = cb;
@@ -818,26 +824,124 @@ function bindRiskPointer() {
     }
 }
 
+function globeOn(): boolean {
+    try {
+        if (typeof isGlobeActive === 'function' && isGlobeActive()) return true;
+    } catch {
+        /* fall through to the class Windy puts on the page */
+    }
+    return Boolean(document.body?.classList?.contains('onglobe'));
+}
+
 export function removeRiskLayer() {
+    riskGeneration += 1;
     try {
         riskLayer?.remove?.();
     } catch {
         /* the map can already be gone */
     }
+    riskRoot?.remove();
     riskLayer = null;
+    riskRoot = null;
     riskSig = '';
     riskPointer?.('');
+    if (riskViewBound) {
+        riskViewBound = false;
+        const m = map as any;
+        m?.off?.('move', layoutRiskTiles);
+        m?.off?.('zoom', layoutRiskTiles);
+        m?.off?.('zoomend', layoutRiskTiles);
+        m?.off?.('moveend', layoutRiskTiles);
+        m?.off?.('resize', layoutRiskTiles);
+        m?.off?.('viewreset', layoutRiskTiles);
+    }
 }
 
-function ensureRiskLayer(): boolean {
-    if (riskLayer) return true;
-    const Grid = win.L?.GridLayer;
-    if (!Grid?.extend || !(map as any)?.addLayer) return false;
+/** A pane between the basemap and the place-name markers. The default tile pane sits under the basemap. */
+function ensureRiskPane(): string {
+    const id = 'wms-risk-style';
+    if (!document.getElementById(id)) {
+        const style = document.createElement('style');
+        style.id = id;
+        style.textContent = '.leaflet-wmsRisk-pane,.wms-risk-layer{z-index:450 !important;pointer-events:none !important}';
+        document.head.appendChild(style);
+    }
+    const m = map as any;
+    try {
+        if (!m?.getPane?.(RISK_PANE) && typeof m?.createPane === 'function') {
+            const pane = m.createPane(RISK_PANE);
+            pane.style.zIndex = '450';
+            pane.style.pointerEvents = 'none';
+        }
+        if (m?.getPane?.(RISK_PANE)) return RISK_PANE;
+    } catch {
+        /* overlay pane is the next pane above the basemap */
+    }
+    return 'overlayPane';
+}
+
+function gridLayerClass(): any {
+    const L = win.L;
+    if (typeof L?.GridLayer?.extend === 'function') return L.GridLayer;
+    if (!L || typeof L !== 'object') return null;
+    for (const key of Object.keys(L)) {
+        const value = L[key];
+        if (
+            /grid/i.test(key) &&
+            typeof value?.extend === 'function' &&
+            typeof value?.prototype?.createTile === 'function'
+        ) {
+            return value;
+        }
+    }
+    return null;
+}
+
+function loadRiskCanvas(tile: HTMLCanvasElement, product: RiskProduct, url: string, generation: number, done?: () => void) {
+    const orig: typeof fetch = win.__wmsOrigFetch || win.fetch.bind(win);
+    orig(url)
+        .then(res => {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.blob();
+        })
+        .then(blob => createImageBitmap(blob))
+        .then(bitmap => {
+            if (generation !== riskGeneration) {
+                bitmap.close?.();
+                done?.();
+                return;
+            }
+            paintRiskTile(tile, bitmap, product);
+            if (riskTileWarned) {
+                riskTileWarned = false;
+                riskNotice?.('');
+            }
+            done?.();
+        })
+        .catch(() => {
+            if (generation !== riskGeneration) {
+                done?.();
+                return;
+            }
+            if (!riskTileWarned) {
+                riskTileWarned = true;
+                riskNotice?.('Those tiles could not be read. The tile server has to allow this page to read the images.');
+            }
+            done?.();
+        });
+}
+
+function ensureGridRiskLayer(): boolean {
+    if (riskLayer && !riskRoot) return true;
+    const Grid = gridLayerClass();
+    const m = map as any;
+    if (!Grid?.extend || typeof m?.addLayer !== 'function') return false;
     const Layer = Grid.extend({
         createTile(coords: { x: number; y: number; z: number }, done: (error: Error | null, tile: HTMLCanvasElement) => void) {
             const tile = document.createElement('canvas');
-            tile.width = 256;
-            tile.height = 256;
+            tile.width = RISK_TILE;
+            tile.height = RISK_TILE;
+            tile.className = 'wms-risk-tile';
             const product = settings.risk.active;
             const style = product ? settings.risk.products[product] : null;
             const url = product && style ? riskTileUrl(style.tileUrl, product, coords.z, coords.x, coords.y) : null;
@@ -845,32 +949,18 @@ function ensureRiskLayer(): boolean {
                 done(null, tile);
                 return tile;
             }
-            const orig: typeof fetch = win.__wmsOrigFetch || win.fetch.bind(win);
-            orig(url)
-                .then(res => {
-                    if (!res.ok) throw new Error(String(res.status));
-                    return res.blob();
-                })
-                .then(blob => createImageBitmap(blob))
-                .then(bitmap => {
-                    paintRiskTile(tile, bitmap, product);
-                    if (riskTileWarned) {
-                        riskTileWarned = false;
-                        riskNotice?.('');
-                    }
-                    done(null, tile);
-                })
-                .catch(() => {
-                    if (!riskTileWarned) {
-                        riskTileWarned = true;
-                        riskNotice?.('Those tiles could not be read. The tile server has to allow this page to read the images.');
-                    }
-                    done(null, tile);
-                });
+            loadRiskCanvas(tile, product, url, riskGeneration, () => done(null, tile));
             return tile;
         },
     });
-    riskLayer = new Layer({ tileSize: 256, zIndex: 450, opacity: 1, updateWhenIdle: false });
+    riskLayer = new Layer({
+        tileSize: RISK_TILE,
+        zIndex: 450,
+        opacity: 1,
+        updateWhenIdle: false,
+        pane: ensureRiskPane(),
+        className: 'wms-risk-layer',
+    });
     try {
         riskLayer.addTo(map);
     } catch {
@@ -880,30 +970,144 @@ function ensureRiskLayer(): boolean {
     return true;
 }
 
+function bindRiskView() {
+    if (riskViewBound) return;
+    riskViewBound = true;
+    const m = map as any;
+    m?.on?.('move', layoutRiskTiles);
+    m?.on?.('zoom', layoutRiskTiles);
+    m?.on?.('zoomend', layoutRiskTiles);
+    m?.on?.('moveend', layoutRiskTiles);
+    m?.on?.('resize', layoutRiskTiles);
+    m?.on?.('viewreset', layoutRiskTiles);
+}
+
+function layoutRiskTiles() {
+    const root = riskRoot;
+    const layer = riskLayer;
+    if (!root || !layer) return;
+    const m = map as any;
+    const product = settings.risk.active;
+    const style = product ? settings.risk.products[product] : null;
+    if (!product || !style || typeof m?.project !== 'function' || typeof m?.getCenter !== 'function' || typeof m?.getSize !== 'function') {
+        return;
+    }
+    const zoom = Number(m.getZoom());
+    const z = Math.round(zoom);
+    if (!Number.isFinite(z)) return;
+    const scale = 2 ** (zoom - z);
+    const center = m.project(m.getCenter(), z);
+    const size = m.getSize();
+    const halfX = size.x / (2 * (scale || 1));
+    const halfY = size.y / (2 * (scale || 1));
+    const minX = Math.floor((center.x - halfX) / RISK_TILE) - 1;
+    const maxX = Math.floor((center.x + halfX) / RISK_TILE) + 1;
+    const limit = 2 ** z;
+    const minY = Math.max(0, Math.floor((center.y - halfY) / RISK_TILE) - 1);
+    const maxY = Math.min(limit - 1, Math.floor((center.y + halfY) / RISK_TILE) + 1);
+    const wanted = new Set<string>();
+    layer._tileZoom = z;
+    for (let x = minX; x <= maxX; x += 1) {
+        for (let y = minY; y <= maxY; y += 1) {
+            const key = `${x}:${y}:${z}`;
+            wanted.add(key);
+            let entry = layer._tiles[key];
+            if (!entry) {
+                const tile = document.createElement('canvas');
+                tile.width = RISK_TILE;
+                tile.height = RISK_TILE;
+                tile.className = 'wms-risk-tile';
+                tile.style.position = 'absolute';
+                tile.style.left = '0';
+                tile.style.top = '0';
+                tile.style.transformOrigin = '0 0';
+                root.appendChild(tile);
+                entry = { el: tile, coords: { x, y, z } };
+                layer._tiles[key] = entry;
+                const url = riskTileUrl(style.tileUrl, product, z, x, y);
+                if (url) loadRiskCanvas(tile, product, url, riskGeneration);
+            }
+            const pixel = typeof win.L?.point === 'function' ? win.L.point(x * RISK_TILE, y * RISK_TILE) : { x: x * RISK_TILE, y: y * RISK_TILE };
+            const nw = typeof m.unproject === 'function' ? m.unproject(pixel, z) : null;
+            const point = nw && typeof m.latLngToLayerPoint === 'function' ? m.latLngToLayerPoint(nw) : null;
+            if (point) {
+                entry.el.style.transform = `translate(${point.x}px, ${point.y}px) scale(${scale})`;
+            }
+        }
+    }
+    for (const key of Object.keys(layer._tiles)) {
+        if (wanted.has(key)) continue;
+        layer._tiles[key].el.remove();
+        delete layer._tiles[key];
+    }
+}
+
+function ensureManualRiskLayer(): boolean {
+    if (riskRoot && riskLayer) return true;
+    const m = map as any;
+    const pane = m?.getPane?.(ensureRiskPane()) ?? m?.getPanes?.()?.overlayPane;
+    if (!pane) return false;
+    const root = document.createElement('div');
+    root.className = 'leaflet-layer wms-risk-layer';
+    root.style.position = 'absolute';
+    root.style.left = '0';
+    root.style.top = '0';
+    root.style.zIndex = '450';
+    root.style.pointerEvents = 'none';
+    pane.appendChild(root);
+    riskRoot = root;
+    riskLayer = { _tiles: {}, _tileZoom: null, redraw: layoutRiskTiles, remove: () => root.remove() };
+    bindRiskView();
+    layoutRiskTiles();
+    return true;
+}
+
+function ensureRiskLayer(): boolean {
+    if (riskLayer) return true;
+    if (ensureGridRiskLayer()) return true;
+    return ensureManualRiskLayer();
+}
+
 function applyRiskLayer() {
     if (!riskWanted) {
-        if (riskLayer) removeRiskLayer();
+        if (riskLayer || riskRoot) removeRiskLayer();
+        return;
+    }
+    if (globeOn()) {
+        if (riskLayer || riskRoot) removeRiskLayer();
+        riskNotice?.('Switch off the globe to see a risk product.');
         return;
     }
     const sig = riskSignature();
     if (!sig) {
-        if (riskLayer) removeRiskLayer();
+        if (riskLayer || riskRoot) removeRiskLayer();
         riskNotice?.('');
         return;
     }
     const existing = Boolean(riskLayer);
-    if (!ensureRiskLayer()) return;
+    if (!ensureRiskLayer()) {
+        riskNotice?.('This map cannot draw an extra tile layer.');
+        return;
+    }
     bindRiskPointer();
     if (!existing) {
         riskSig = sig;
+        riskNotice?.('');
         return;
     }
     if (sig === riskSig) return;
     riskSig = sig;
     riskTileWarned = false;
     riskNotice?.('');
+    riskGeneration += 1;
     try {
-        riskLayer.redraw();
+        if (riskRoot) {
+            for (const entry of Object.values(riskLayer._tiles ?? {}) as { el: HTMLCanvasElement }[]) entry.el.remove();
+            riskLayer._tiles = {};
+            layoutRiskTiles();
+        } else {
+            riskLayer.redraw();
+        }
     } catch {
         /* the next view change loads the tiles */
     }

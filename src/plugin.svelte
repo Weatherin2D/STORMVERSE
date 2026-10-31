@@ -1,6 +1,115 @@
 <section class="plugin__content">
     <p class="status" aria-live="polite">{status}</p>
 
+    <h3>Risk</h3>
+    <div class="block">
+        <label class="row">
+            <input type="radio" name="risk-product" checked={activeRisk === null} on:change={() => chooseRisk(null)} />
+            <span class="grow">Off</span>
+        </label>
+    </div>
+    {#each RISK_PRODUCTS as product}
+        <div class="block">
+            <label class="row">
+                <input
+                    type="radio"
+                    name="risk-product"
+                    checked={activeRisk === product}
+                    on:change={() => chooseRisk(product)}
+                />
+                <span class="grow">{RISK_LABELS[product]}</span>
+                <span class="swatch" style={`background:${legendGradient(s.risk.products[product].stops)}`}></span>
+            </label>
+            {#if activeRisk === product}
+                <small class="note">{RISK_NOTES[product]}</small>
+                <label class="sub" for="risk-url">Tile address</label>
+                <input
+                    id="risk-url"
+                    class="addr"
+                    type="url"
+                    placeholder="https://tiles.example/{product}/{z}/{x}/{y}.png"
+                    bind:value={s.risk.products[product].tileUrl}
+                    on:change={() => changed()}
+                />
+                {#if !s.risk.products[product].tileUrl}
+                    <small class="note">Paste a tile address to draw this product. It needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
+                {:else if !riskAddressOk}
+                    <small class="note">This address needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
+                {/if}
+                <div class="row tight">
+                    <label class="grow" for="risk-opacity">Opacity: {opacityText}</label>
+                    <input
+                        id="risk-opacity"
+                        class="slider"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        bind:value={s.risk.opacity}
+                        on:change={() => {
+                            const n = Number(s.risk.opacity);
+                            s.risk.opacity = Math.round((Number.isFinite(n) ? n : 0.85) * 20) / 20;
+                            changed();
+                        }}
+                    />
+                </div>
+                {#if product === 'hailSize'}
+                    <div class="row tight">
+                        <label class="grow" for="hail-unit">Show hail size in</label>
+                        <select id="hail-unit" class="unit" bind:value={s.risk.hailUnit} on:change={() => changed()}>
+                            <option value="mm">Millimetres</option>
+                            <option value="cm">Centimetres</option>
+                            <option value="in">Inches</option>
+                        </select>
+                    </div>
+                {/if}
+                <div class="legend" style={`background:${legendGradient(s.risk.products[product].stops)}`}></div>
+                <div class="row tight">
+                    <small>{scaleEndLabel(0)}</small>
+                    <span class="grow"></span>
+                    <small>{scaleEndLabel(-1)}</small>
+                </div>
+                <p class="status">{pointerText || (riskAddressOk ? 'Move over the map to read a value.' : '')}</p>
+                {#if riskNote}
+                    <small class="note">{riskNote}</small>
+                {/if}
+                <h4>Colour scale</h4>
+                <small class="note">
+                    {product === 'hailSize' ? 'Stops are in millimetres. The labels above follow the unit you picked.' : 'Stops are in percent.'}
+                </small>
+                {#each s.risk.products[product].stops as stop, index}
+                    <div class="row tight">
+                        <input
+                            class="stop-value"
+                            type="number"
+                            step="0.1"
+                            value={stop.value}
+                            aria-label="Stop value"
+                            on:change={e => setStopValue(index, e)}
+                        />
+                        <input
+                            type="color"
+                            value={stopColor(stop.color)}
+                            aria-label="Stop colour"
+                            on:change={e => setStopColor(index, e)}
+                        />
+                        <button class="btn" on:click={() => removeStop(index)} disabled={s.risk.products[product].stops.length < 2}>
+                            Remove
+                        </button>
+                    </div>
+                {/each}
+                <div class="row wrap">
+                    <button class="btn" on:click={addStop}>Add stop</button>
+                    <label class="btn">
+                        Import scale
+                        <input type="file" accept="application/json,.json" hidden on:change={importScale} />
+                    </label>
+                    <button class="btn" on:click={saveScale}>Save scale</button>
+                </div>
+            {/if}
+        </div>
+    {/each}
+
     <h3>Background</h3>
     <div class="row">
         <label class="grow">
@@ -51,7 +160,7 @@
                     }}
                     aria-label="{kindLabels[kind]} colour"
                 />
-                <select bind:value={s.kinds[kind].ink} on:change={() => changed(kind)} aria-label="Pixels to recolour">
+                <select class="narrow" bind:value={s.kinds[kind].ink} on:change={() => changed(kind)} aria-label="Pixels to recolour">
                     <option value="all">All pixels</option>
                     <option value="dark">Dark parts</option>
                     <option value="light">Light parts</option>
@@ -105,104 +214,6 @@
         {/each}
         <small class="note">{group.note}</small>
     {/each}
-
-    <h3>Risk</h3>
-    <div class="row">
-        <label class="grow" for="risk-product">Product</label>
-        <select id="risk-product" value={s.risk.active ?? ''} on:change={pickRisk}>
-            <option value="">Off</option>
-            {#each RISK_PRODUCTS as product}
-                <option value={product}>{RISK_LABELS[product]}</option>
-            {/each}
-        </select>
-    </div>
-    {#if activeRisk}
-        <small class="note">{RISK_NOTES[activeRisk]}</small>
-        <label class="sub" for="risk-url">Tile address</label>
-        <input
-            id="risk-url"
-            class="addr"
-            type="url"
-            placeholder="https://tiles.example/{product}/{z}/{x}/{y}.png"
-            bind:value={s.risk.products[activeRisk].tileUrl}
-            on:change={() => changed()}
-        />
-        {#if !s.risk.products[activeRisk].tileUrl}
-            <small class="note">Paste a tile address to draw this product. It needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
-        {:else if !riskAddressOk}
-            <small class="note">This address needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
-        {/if}
-        <div class="row tight">
-            <label class="grow" for="risk-opacity">Opacity: {opacityText}</label>
-            <input
-                id="risk-opacity"
-                class="slider"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                bind:value={s.risk.opacity}
-                on:change={() => {
-                    const n = Number(s.risk.opacity);
-                    s.risk.opacity = Math.round((Number.isFinite(n) ? n : 0.85) * 20) / 20;
-                    changed();
-                }}
-            />
-        </div>
-        {#if activeRisk === 'hailSize'}
-            <div class="row tight">
-                <label class="grow" for="hail-unit">Show hail size in</label>
-                <select id="hail-unit" bind:value={s.risk.hailUnit} on:change={() => changed()}>
-                    <option value="mm">Millimetres</option>
-                    <option value="cm">Centimetres</option>
-                    <option value="in">Inches</option>
-                </select>
-            </div>
-        {/if}
-        <div class="legend" style={`background:${legendGradient(s.risk.products[activeRisk].stops)}`}></div>
-        <div class="row tight">
-            <small>{scaleEndLabel(0)}</small>
-            <span class="grow"></span>
-            <small>{scaleEndLabel(-1)}</small>
-        </div>
-        <p class="status">{pointerText || (riskAddressOk ? 'Move over the map to read a value.' : '')}</p>
-        {#if riskNote}
-            <small class="note">{riskNote}</small>
-        {/if}
-        <h4>Colour scale</h4>
-        <small class="note">
-            {activeRisk === 'hailSize' ? 'Stops are in millimetres. The labels above follow the unit you picked.' : 'Stops are in percent.'}
-        </small>
-        {#each s.risk.products[activeRisk].stops as stop, index}
-            <div class="row tight">
-                <input
-                    class="stop-value"
-                    type="number"
-                    step="0.1"
-                    value={stop.value}
-                    aria-label="Stop value"
-                    on:change={e => setStopValue(index, e)}
-                />
-                <input
-                    type="color"
-                    value={stopColor(stop.color)}
-                    aria-label="Stop colour"
-                    on:change={e => setStopColor(index, e)}
-                />
-                <button class="btn" on:click={() => removeStop(index)} disabled={s.risk.products[activeRisk].stops.length < 2}>
-                    Remove
-                </button>
-            </div>
-        {/each}
-        <div class="row wrap">
-            <button class="btn" on:click={addStop}>Add stop</button>
-            <label class="btn">
-                Import scale
-                <input type="file" accept="application/json,.json" hidden on:change={importScale} />
-            </label>
-            <button class="btn" on:click={saveScale}>Save scale</button>
-        </div>
-    {/if}
 
     <h3>Inspector</h3>
     <div class="row wrap">
@@ -400,9 +411,8 @@
         }
     }
 
-    function pickRisk(e: Event) {
-        const value = (e.target as HTMLSelectElement).value;
-        s.risk.active = (RISK_PRODUCTS as readonly string[]).includes(value) ? (value as RiskProduct) : null;
+    function chooseRisk(product: RiskProduct | null) {
+        s.risk.active = product;
         pointerText = '';
         riskNote = '';
         changed();
@@ -594,8 +604,17 @@
         margin: 8px 0 2px;
         border-radius: 7px;
     }
-    select {
+    .narrow {
         max-width: 110px;
+    }
+    .unit {
+        max-width: 150px;
+    }
+    .swatch {
+        width: 72px;
+        height: 14px;
+        border-radius: 7px;
+        flex: none;
     }
     .thumb {
         width: 28px;
