@@ -93,6 +93,22 @@ test('thickness grows the stroke into a solid line', () => {
     assert.equal(pixels[7], 255);
 });
 
+test('tenths of thickness change the stroke before a full pixel', () => {
+    const faint = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 40]);
+    recolorImageData(faint, 2, 1, [{ ...outline, thickness: 1.2 }]);
+    assert.equal(faint[3], 0);
+    assert.deepEqual(Array.from(faint.slice(4, 7)), [255, 0, 0]);
+    assert.equal(faint[7] > 40, true);
+    assert.equal(faint[7] < 255, true);
+
+    const wider = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 40]);
+    recolorImageData(wider, 2, 1, [{ ...outline, thickness: 1.5 }]);
+    assert.deepEqual(Array.from(wider.slice(0, 3)), [255, 0, 0]);
+    assert.equal(wider[3] > 0, true);
+    assert.equal(wider[3] < 120, true);
+    assert.equal(wider[7], 255);
+});
+
 test('thickness 1 does not widen the stroke', () => {
     const pixels = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 0, 200]);
     recolorImageData(pixels, 2, 1, [outline]);

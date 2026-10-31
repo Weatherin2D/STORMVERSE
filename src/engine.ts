@@ -24,8 +24,8 @@ export const ICONS: IconKind[] = ['lightning', 'snow', 'hail'];
 export const settings: Settings = loadSettings();
 
 const STYLE_ELEMENT_ID = 'windy-plugin-map-style';
-const FETCH_VERSION = 4;
-const IMAGE_PATCH_VERSION = 4;
+const FETCH_VERSION = 5;
+const IMAGE_PATCH_VERSION = 5;
 
 /* ------------------------------------------------------------------ */
 /* Map access                                                          */

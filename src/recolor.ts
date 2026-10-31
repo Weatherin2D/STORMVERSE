@@ -51,8 +51,13 @@ function inkMatches(luminance: number, ink: InkTarget): boolean {
     return ink === 'all' || (ink === 'dark' && luminance < 128) || (ink === 'light' && luminance >= 128);
 }
 
+/** Thickness 1 keeps the original stroke. Each tenth above that adds a tenth of a pixel. */
 function lineRadius(thickness: number): number {
-    return Math.max(1, Math.round(Number(thickness) || 1)) - 1;
+    const value = Number(thickness);
+    const clamped = Math.min(5, Math.max(1, Number.isFinite(value) ? value : 1));
+    const stepped = Math.round(clamped * 10) / 10;
+    const radius = stepped - 1;
+    return radius > 1e-6 ? radius : 0;
 }
 
 function coverageAlpha(radius: number, distance: number, sourceAlpha: number): number {

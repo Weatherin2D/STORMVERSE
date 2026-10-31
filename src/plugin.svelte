@@ -59,16 +59,18 @@
             </div>
             {#if kind !== 'labels'}
                 <div class="row tight">
-                    <label class="grow" for="thickness-{kind}">Line thickness: {s.kinds[kind].thickness ?? 1}×</label>
+                    <label class="grow" for="thickness-{kind}">Line thickness: {thicknessText(s.kinds[kind].thickness)}×</label>
                     <input
                         id="thickness-{kind}"
                         type="range"
                         min="1"
                         max="5"
-                        step="1"
+                        step="0.1"
                         bind:value={s.kinds[kind].thickness}
                         on:change={() => {
-                            if (Number(s.kinds[kind].thickness) > 1) s.kinds[kind].recolor = true;
+                            const n = Number(s.kinds[kind].thickness);
+                            s.kinds[kind].thickness = Math.round((Number.isFinite(n) ? n : 1) * 10) / 10;
+                            if (s.kinds[kind].thickness > 1) s.kinds[kind].recolor = true;
                             changed(kind);
                         }}
                         aria-label="{kindLabels[kind]} thickness"
@@ -213,6 +215,10 @@
     const iconShort: Record<IconKind, string> = { lightning: 'Li', snow: 'Sn', hail: 'Ha' };
 
     const shortUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    const thicknessText = (value: number | string | null | undefined) => {
+        const n = Number(value);
+        return (Number.isFinite(n) ? n : 1).toFixed(1);
+    };
 
     function refreshInfo() {
         for (const k of KINDS) {
@@ -378,7 +384,7 @@
         background: none;
     }
     .slider {
-        width: 100px;
+        width: 180px;
         cursor: pointer;
     }
     select {
