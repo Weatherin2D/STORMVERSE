@@ -16,7 +16,7 @@
         "example06": "CONFIG=example06 rollup -w -c",
         "example07": "CONFIG=example07 rollup -w -c",
         "build:all-examples": "for number in 01 02 03 04 05 06; do CONFIG=example$number SERVE=false rollup -c; done",
-        "test": "node --experimental-strip-types --test test/recolor.test.ts test/icons.test.ts"
+        "test": "node --experimental-strip-types --test test/recolor.test.ts test/icons.test.ts test/risk.test.ts"
     },
     "repository": {
         "type": "git",

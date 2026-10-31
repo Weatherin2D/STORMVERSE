@@ -20,6 +20,8 @@ import {
     THUNDER_TEXTURE,
 } from './icons';
 import type { IconMask } from './icons';
+import { colorizePixels, encodingMax, formatRiskValue, riskTileUrl } from './risk';
+import type { RiskProduct } from './risk';
 import { defaults, loadSettings, saveSettings } from './settings';
 import type { IconKind, Kind, Settings } from './settings';
 
@@ -735,6 +737,178 @@ function layerSignature(): string {
         .join('|');
 }
 
+let riskLayer: any = null;
+let riskSig = '';
+let riskWanted = false;
+let riskPointer: ((text: string) => void) | null = null;
+let riskNotice: ((text: string) => void) | null = null;
+let riskMoveBound = false;
+let riskTileWarned = false;
+
+export function watchRiskPointer(cb: (text: string) => void): () => void {
+    riskPointer = cb;
+    return () => {
+        if (riskPointer === cb) riskPointer = null;
+    };
+}
+
+export function watchRiskNotice(cb: (text: string) => void): () => void {
+    riskNotice = cb;
+    return () => {
+        if (riskNotice === cb) riskNotice = null;
+    };
+}
+
+function riskSignature(): string {
+    const active = settings.risk.active;
+    if (!active) return '';
+    const style = settings.risk.products[active];
+    if (!style || !riskTileUrl(style.tileUrl, active, 0, 0, 0)) return '';
+    return JSON.stringify({
+        active,
+        opacity: settings.risk.opacity,
+        url: style.tileUrl,
+        stops: style.stops,
+    });
+}
+
+function paintRiskTile(tile: HTMLCanvasElement, bitmap: ImageBitmap, product: RiskProduct) {
+    const context = tile.getContext('2d', { willReadFrequently: true });
+    if (!context) return;
+    context.imageSmoothingEnabled = false;
+    context.clearRect(0, 0, 256, 256);
+    context.drawImage(bitmap, 0, 0, 256, 256);
+    bitmap.close?.();
+    const image = context.getImageData(0, 0, 256, 256);
+    const style = settings.risk.products[product];
+    const painted = colorizePixels(image.data, encodingMax(product, style.stops), style.stops, Number(settings.risk.opacity) || 0);
+    context.putImageData(new ImageData(painted.pixels, 256, 256), 0, 0);
+    (tile as any)._riskValues = painted.values;
+}
+
+function onRiskMove(event: any) {
+    const product = settings.risk.active;
+    const latlng = event?.latlng;
+    if (!product || !riskLayer || !latlng || !(map as any)?.project) {
+        riskPointer?.('');
+        return;
+    }
+    const zoom = riskLayer._tileZoom;
+    if (zoom == null) {
+        riskPointer?.('');
+        return;
+    }
+    const projected = (map as any).project(latlng, zoom);
+    const x = Math.floor(projected.x / 256);
+    const y = Math.floor(projected.y / 256);
+    const px = Math.floor(projected.x - x * 256);
+    const py = Math.floor(projected.y - y * 256);
+    const values: Float32Array | undefined = riskLayer._tiles?.[`${x}:${y}:${zoom}`]?.el?._riskValues;
+    const value = values && px >= 0 && py >= 0 && px < 256 && py < 256 ? values[py * 256 + px] : Number.NaN;
+    riskPointer?.(Number.isFinite(value) ? formatRiskValue(product, value, settings.risk.hailUnit) : '');
+}
+
+function bindRiskPointer() {
+    if (riskMoveBound) return;
+    riskMoveBound = true;
+    try {
+        (map as any)?.on?.('mousemove', onRiskMove);
+    } catch {
+        riskMoveBound = false;
+    }
+}
+
+export function removeRiskLayer() {
+    try {
+        riskLayer?.remove?.();
+    } catch {
+        /* the map can already be gone */
+    }
+    riskLayer = null;
+    riskSig = '';
+    riskPointer?.('');
+}
+
+function ensureRiskLayer(): boolean {
+    if (riskLayer) return true;
+    const Grid = win.L?.GridLayer;
+    if (!Grid?.extend || !(map as any)?.addLayer) return false;
+    const Layer = Grid.extend({
+        createTile(coords: { x: number; y: number; z: number }, done: (error: Error | null, tile: HTMLCanvasElement) => void) {
+            const tile = document.createElement('canvas');
+            tile.width = 256;
+            tile.height = 256;
+            const product = settings.risk.active;
+            const style = product ? settings.risk.products[product] : null;
+            const url = product && style ? riskTileUrl(style.tileUrl, product, coords.z, coords.x, coords.y) : null;
+            if (!product || !url) {
+                done(null, tile);
+                return tile;
+            }
+            const orig: typeof fetch = win.__wmsOrigFetch || win.fetch.bind(win);
+            orig(url)
+                .then(res => {
+                    if (!res.ok) throw new Error(String(res.status));
+                    return res.blob();
+                })
+                .then(blob => createImageBitmap(blob))
+                .then(bitmap => {
+                    paintRiskTile(tile, bitmap, product);
+                    if (riskTileWarned) {
+                        riskTileWarned = false;
+                        riskNotice?.('');
+                    }
+                    done(null, tile);
+                })
+                .catch(() => {
+                    if (!riskTileWarned) {
+                        riskTileWarned = true;
+                        riskNotice?.('Those tiles could not be read. The tile server has to allow this page to read the images.');
+                    }
+                    done(null, tile);
+                });
+            return tile;
+        },
+    });
+    riskLayer = new Layer({ tileSize: 256, zIndex: 450, opacity: 1, updateWhenIdle: false });
+    try {
+        riskLayer.addTo(map);
+    } catch {
+        riskLayer = null;
+        return false;
+    }
+    return true;
+}
+
+function applyRiskLayer() {
+    if (!riskWanted) {
+        if (riskLayer) removeRiskLayer();
+        return;
+    }
+    const sig = riskSignature();
+    if (!sig) {
+        if (riskLayer) removeRiskLayer();
+        riskNotice?.('');
+        return;
+    }
+    const existing = Boolean(riskLayer);
+    if (!ensureRiskLayer()) return;
+    bindRiskPointer();
+    if (!existing) {
+        riskSig = sig;
+        return;
+    }
+    if (sig === riskSig) return;
+    riskSig = sig;
+    riskTileWarned = false;
+    riskNotice?.('');
+    try {
+        riskLayer.redraw();
+    } catch {
+        /* the next view change loads the tiles */
+    }
+}
+
 export function apply() {
     const previousSig = JSON.stringify(recolorRules);
     rebuildRules();
@@ -744,6 +918,7 @@ export function apply() {
     applyLabels();
     applyLineVisibility();
     KINDS.forEach(applyKind);
+    applyRiskLayer();
     const nextSig = JSON.stringify(recolorRules);
     if (nextSig === lastRuleSig && nextSig === previousSig) return;
     const hadRules = lastRuleSig !== '' && lastRuleSig !== '[]';
@@ -762,6 +937,7 @@ export function resetAll() {
     settings.background = fresh.background;
     settings.kinds = fresh.kinds;
     settings.icons = fresh.icons;
+    settings.risk = fresh.risk;
     saveSettings(settings);
     apply();
 }
@@ -771,6 +947,7 @@ let lastLayerSig = '';
 let shaderTimer = 0;
 
 export function start() {
+    riskWanted = true;
     try {
         performance.setResourceTimingBufferSize?.(2000);
     } catch {
@@ -807,6 +984,17 @@ export function start() {
         tries += 1;
         if ((backgroundShader() && !tilesNeedReload) || tries > 20) window.clearInterval(shaderTimer);
     }, 500);
+}
+
+export function stop() {
+    riskWanted = false;
+    try {
+        (map as any)?.off?.('mousemove', onRiskMove);
+    } catch {
+        /* ignore */
+    }
+    riskMoveBound = false;
+    removeRiskLayer();
 }
 
 /* ------------------------------------------------------------------ */

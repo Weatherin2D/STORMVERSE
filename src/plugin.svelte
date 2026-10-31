@@ -106,6 +106,104 @@
         <small class="note">{group.note}</small>
     {/each}
 
+    <h3>Risk</h3>
+    <div class="row">
+        <label class="grow" for="risk-product">Product</label>
+        <select id="risk-product" value={s.risk.active ?? ''} on:change={pickRisk}>
+            <option value="">Off</option>
+            {#each RISK_PRODUCTS as product}
+                <option value={product}>{RISK_LABELS[product]}</option>
+            {/each}
+        </select>
+    </div>
+    {#if activeRisk}
+        <small class="note">{RISK_NOTES[activeRisk]}</small>
+        <label class="sub" for="risk-url">Tile address</label>
+        <input
+            id="risk-url"
+            class="addr"
+            type="url"
+            placeholder="https://tiles.example/{product}/{z}/{x}/{y}.png"
+            bind:value={s.risk.products[activeRisk].tileUrl}
+            on:change={() => changed()}
+        />
+        {#if !s.risk.products[activeRisk].tileUrl}
+            <small class="note">Paste a tile address to draw this product. It needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
+        {:else if !riskAddressOk}
+            <small class="note">This address needs {'{z}'}, {'{x}'}, and {'{y}'}.</small>
+        {/if}
+        <div class="row tight">
+            <label class="grow" for="risk-opacity">Opacity: {opacityText}</label>
+            <input
+                id="risk-opacity"
+                class="slider"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                bind:value={s.risk.opacity}
+                on:change={() => {
+                    const n = Number(s.risk.opacity);
+                    s.risk.opacity = Math.round((Number.isFinite(n) ? n : 0.85) * 20) / 20;
+                    changed();
+                }}
+            />
+        </div>
+        {#if activeRisk === 'hailSize'}
+            <div class="row tight">
+                <label class="grow" for="hail-unit">Show hail size in</label>
+                <select id="hail-unit" bind:value={s.risk.hailUnit} on:change={() => changed()}>
+                    <option value="mm">Millimetres</option>
+                    <option value="cm">Centimetres</option>
+                    <option value="in">Inches</option>
+                </select>
+            </div>
+        {/if}
+        <div class="legend" style={`background:${legendGradient(s.risk.products[activeRisk].stops)}`}></div>
+        <div class="row tight">
+            <small>{scaleEndLabel(0)}</small>
+            <span class="grow"></span>
+            <small>{scaleEndLabel(-1)}</small>
+        </div>
+        <p class="status">{pointerText || (riskAddressOk ? 'Move over the map to read a value.' : '')}</p>
+        {#if riskNote}
+            <small class="note">{riskNote}</small>
+        {/if}
+        <h4>Colour scale</h4>
+        <small class="note">
+            {activeRisk === 'hailSize' ? 'Stops are in millimetres. The labels above follow the unit you picked.' : 'Stops are in percent.'}
+        </small>
+        {#each s.risk.products[activeRisk].stops as stop, index}
+            <div class="row tight">
+                <input
+                    class="stop-value"
+                    type="number"
+                    step="0.1"
+                    value={stop.value}
+                    aria-label="Stop value"
+                    on:change={e => setStopValue(index, e)}
+                />
+                <input
+                    type="color"
+                    value={stopColor(stop.color)}
+                    aria-label="Stop colour"
+                    on:change={e => setStopColor(index, e)}
+                />
+                <button class="btn" on:click={() => removeStop(index)} disabled={s.risk.products[activeRisk].stops.length < 2}>
+                    Remove
+                </button>
+            </div>
+        {/each}
+        <div class="row wrap">
+            <button class="btn" on:click={addStop}>Add stop</button>
+            <label class="btn">
+                Import scale
+                <input type="file" accept="application/json,.json" hidden on:change={importScale} />
+            </label>
+            <button class="btn" on:click={saveScale}>Save scale</button>
+        </div>
+    {/if}
+
     <h3>Inspector</h3>
     <div class="row wrap">
         <button class="btn" on:click={doScan}>Scan map and textures</button>
@@ -174,13 +272,20 @@
         scan,
         settings,
         start,
+        stop,
+        watchRiskNotice,
+        watchRiskPointer,
     } from './engine';
     import type { IconKind, Kind, ScanResult } from './engine';
+    import { formatRiskValue, formatScale, legendGradient, parseScale, RISK_LABELS, RISK_NOTES, RISK_PRODUCTS, riskTileUrl } from './risk';
+    import type { RiskProduct } from './risk';
 
     let s = settings;
     let status = '';
     let diagText = '';
     let scanResult: ScanResult | null = null;
+    let pointerText = '';
+    let riskNote = '';
     let layerInfo: Record<Kind, string> = { major: '', regional: '', rivers: '', streams: '', labels: '' };
 
     const kindLabels: Record<Kind, string> = {
@@ -211,7 +316,12 @@
         },
     ];
 
+    $: activeRisk = (s.risk.active || null) as RiskProduct | null;
+    $: riskAddressOk = activeRisk ? riskTileUrl(s.risk.products[activeRisk].tileUrl, activeRisk, 0, 0, 0) !== null : false;
+    $: opacityText = (Number(s.risk.opacity) || 0).toFixed(2);
+
     const shortUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    const stopColor = (color: string) => (/^#[0-9a-f]{6}$/i.test(color) ? color : '#888888');
     const thicknessText = (value: number | string | null | undefined) => {
         const n = Number(value);
         return (Number.isFinite(n) ? n : 1).toFixed(1);
@@ -290,19 +400,108 @@
         }
     }
 
+    function pickRisk(e: Event) {
+        const value = (e.target as HTMLSelectElement).value;
+        s.risk.active = (RISK_PRODUCTS as readonly string[]).includes(value) ? (value as RiskProduct) : null;
+        pointerText = '';
+        riskNote = '';
+        changed();
+    }
+
+    function scaleEndLabel(index: number): string {
+        if (!activeRisk) return '';
+        const stops = [...s.risk.products[activeRisk].stops].sort((a, b) => a.value - b.value);
+        const stop = index < 0 ? stops[stops.length - 1] : stops[0];
+        return stop ? formatRiskValue(activeRisk, stop.value, s.risk.hailUnit) : '';
+    }
+
+    function setStopValue(index: number, e: Event) {
+        if (!activeRisk) return;
+        const n = Number((e.target as HTMLInputElement).value);
+        if (!Number.isFinite(n)) return;
+        s.risk.products[activeRisk].stops[index].value = Math.round(n * 10) / 10;
+        s.risk.products[activeRisk].stops = [...s.risk.products[activeRisk].stops].sort((a, b) => a.value - b.value);
+        changed();
+    }
+
+    function setStopColor(index: number, e: Event) {
+        if (!activeRisk) return;
+        s.risk.products[activeRisk].stops[index].color = (e.target as HTMLInputElement).value;
+        changed();
+    }
+
+    function addStop() {
+        if (!activeRisk) return;
+        const stops = s.risk.products[activeRisk].stops;
+        const last = stops[stops.length - 1] ?? { value: 0, color: '#b71c1c' };
+        const step = activeRisk === 'hailSize' ? 10 : 5;
+        stops.push({ value: Math.round((last.value + step) * 10) / 10, color: last.color });
+        changed();
+    }
+
+    function removeStop(index: number) {
+        if (!activeRisk || s.risk.products[activeRisk].stops.length < 2) return;
+        s.risk.products[activeRisk].stops.splice(index, 1);
+        s.risk.products[activeRisk].stops = s.risk.products[activeRisk].stops;
+        changed();
+    }
+
+    async function importScale(e: Event) {
+        if (!activeRisk) return;
+        const input = e.target as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file) return;
+        try {
+            const parsed = parseScale(await file.text());
+            if (!parsed.ok) {
+                status = parsed.error;
+                return;
+            }
+            s.risk.products[activeRisk].stops = parsed.stops;
+            changed();
+            status = 'Colour scale imported';
+        } catch {
+            status = 'That file could not be read.';
+        }
+    }
+
+    function saveScale() {
+        if (!activeRisk) return;
+        const blob = new Blob([formatScale(s.risk.products[activeRisk].stops)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${activeRisk}-scale.json`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+    }
+
     function doReset() {
         resetAll();
         s = settings;
         scanResult = null;
         diagText = '';
+        pointerText = '';
+        riskNote = '';
         status = 'Back to Windy defaults. Reload the page to restore anything already redrawn.';
         refreshInfo();
     }
 
     onMount(() => {
         start();
+        const unwatch = watchRiskPointer(text => {
+            pointerText = text;
+        });
+        const unnote = watchRiskNotice(text => {
+            riskNote = text;
+        });
         refreshInfo();
         s = settings;
+        return () => {
+            unwatch();
+            unnote();
+            stop();
+        };
     });
 </script>
 
@@ -381,6 +580,20 @@
         width: 180px;
         cursor: pointer;
     }
+    .addr {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 2px 0 6px;
+        font: inherit;
+    }
+    .stop-value {
+        width: 90px;
+    }
+    .legend {
+        height: 14px;
+        margin: 8px 0 2px;
+        border-radius: 7px;
+    }
     select {
         max-width: 110px;
     }
@@ -403,6 +616,10 @@
     }
     .btn.danger {
         border-color: rgba(220, 80, 80, 0.7);
+    }
+    .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
     }
     .chip {
         min-width: 30px;

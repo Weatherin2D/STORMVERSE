@@ -12,6 +12,20 @@ Picking a colour now updates the part of the map that colour belongs to. Setting
 
 Radar and satellite share their symbols: the lightning bolt, the snowflake, and the hail mark. Rain, thunder is a separate layer, with its own repeating rain marks and thunder marks. Choose a picture for any of those, then switch that layer off and on. The picture is used as the shape, and Windy still colours it.
 
+## Risk overlays
+
+The Risk section draws one overlay at a time: general convective risk, tornado risk, large hail, damaging winds, predicted hail size, and thunderstorm chance. Paste a tile address that contains `{z}`, `{x}`, and `{y}`. `{product}` is replaced with the product id (`convective`, `tornado`, `largeHail`, `damagingWinds`, `hailSize`, or `thunder`).
+
+Tiles are 256×256 PNGs. A fully transparent pixel is no data. Every other pixel is opaque, and red and green store the number as `(red × 256 + green) ÷ 65535 × maximum`. The maximum is 100 for the percent products. For hail size it is the highest colour-scale stop, in millimetres. The readout can show that size in millimetres, centimetres, or inches.
+
+A colour scale is a JSON file:
+
+```json
+{ "stops": [{ "value": 0, "color": "#e8f5e9" }, { "value": 12.4, "color": "#f9a825" }, { "value": 100, "color": "#b71c1c" }] }
+```
+
+Stops use the product’s own unit: percent, or millimetres for hail size. Import replaces the scale for the product that is selected. Save scale writes the same file back. The tile server has to allow the browser to read the images.
+
 ## Run it
 
 ```bash
@@ -29,4 +43,4 @@ The dev server uses a self-signed certificate for `localhost`. The first time yo
 
 Windy loads that file from `https://www.windy.com`, so the server also allows local-network access. If Chrome asks whether Windy can connect to devices on your local network, choose **Allow**. The address in developer mode must be exactly `https://localhost:9999/plugin.js`.
 
-`npm test` checks the recolour rules and the weather-symbol packing. `npm run build` writes `dist/plugin.js`.
+`npm test` checks the recolour rules, the weather-symbol packing, and the risk colour scales. `npm run build` writes `dist/plugin.js`.
