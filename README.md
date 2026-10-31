@@ -27,12 +27,14 @@ VITE_LIGHTNING_GEOJSON_URL=      # optional licensed lightning FeatureCollection
 
 Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).
 
-### Scene snapshots
+### Scene snapshots & bookmarks
 
-Use **Export scene** / **Copy share link** / **Import scene** in the control dock:
+Use **Export scene** / **Copy share link** / **Import scene** / **Save bookmark** in the control dock:
 
 - JSON download captures layers, timeline, compare set, volume pin, follow/chase, and camera
 - Share links encode the same payload in the URL hash (`#scene=…`)
+- Named bookmarks live in this browser’s `localStorage` (`stormverse.sceneBookmarks.v1`, max 24)
+- Manage them in the info panel **Saved scenes** gallery (save / restore / rename / delete)
 - Restore rematches cells by `stormId` against the live derived-track catalogue (radar is always re-fetched)
 
 ## Milestone status
@@ -61,10 +63,15 @@ Up to four accent-coloured georegistered volumes with compare table metrics.
 ### 8 — Tracking quality proxies
 Heuristic coverage / continuity / speed / smoothness scores with non-verification provenance.
 
-### 9 — Shareable scene snapshots (current)
+### 9 — Shareable scene snapshots
 - Export JSON scene state for compare sets and exploration UI
 - Copy URL hash share links; open/import to restore
 - Live radar and tracks still refresh from providers on restore
+
+### 10 — Named scene bookmarks (current)
+- Save named exploration scenes to local browser storage
+- Gallery in the info panel: restore, rename, delete
+- Quick **Save bookmark** in the share control dock (auto-named)
 
 ## Scientific integrity
 
@@ -76,7 +83,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
 | Globe volume / compare set | **Procedural**, georegistered |
-| Scene snapshot | UI/state only — does not freeze live weather fields |
+| Scene snapshot / bookmark | UI/state only — does not freeze live weather fields |
 | Immersive 3D storm | **Procedural** local scene |
 | Globe lightning | Direct only if you supply a licensed GeoJSON feed |
 | Prototype storm / demo bolts | Synthetic |
@@ -84,7 +91,8 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
-- Snapshots cannot guarantee the same cells exist after catalogue refresh
+- Snapshots and bookmarks cannot guarantee the same cells exist after catalogue refresh
+- Bookmarks are device-local (not synced); clearing site data removes them
 - Track “skill” scores have no ground-truth reference
 - Tracks empty when Australia mosaics lack precip
 
@@ -93,7 +101,6 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
 3. Optional verification hooks when a licensed truth cell product is available
-4. Snapshot galleries / named bookmarks in local storage
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

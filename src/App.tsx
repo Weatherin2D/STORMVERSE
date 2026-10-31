@@ -31,6 +31,14 @@ import {
 import { TIMELINE } from './config/app'
 import { accentForIndex, MAX_COMPARE_VOLUMES } from './config/compare'
 import { SceneShareControls } from './components/controls/SceneShareControls'
+import {
+  defaultBookmarkName,
+  deleteSceneBookmark,
+  getSceneBookmark,
+  listSceneBookmarks,
+  renameSceneBookmark,
+  saveSceneBookmark,
+} from './lib/sceneBookmarks'
 
 export default function App() {
   const reducedMotion = usePrefersReducedMotion()
@@ -66,6 +74,8 @@ export default function App() {
     typeof window !== 'undefined' ? decodeSceneHash(window.location.hash) : null,
   )
   const snapshotAppliedRef = useRef(false)
+  const [bookmarks, setBookmarks] = useState(() => listSceneBookmarks())
+  const refreshBookmarks = useCallback(() => setBookmarks(listSceneBookmarks()), [])
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -684,6 +694,62 @@ export default function App() {
     [],
   )
 
+  const saveBookmarkNamed = useCallback(
+    (name: string) => {
+      try {
+        const snap = captureSnapshot()
+        const saved = saveSceneBookmark(name || defaultBookmarkName(snap), snap)
+        refreshBookmarks()
+        setState((s) => ({
+          ...s,
+          statusMessage: `Bookmark saved · ${saved.name}`,
+          panelOpen: true,
+        }))
+        return { ok: true, message: `Saved “${saved.name}”` }
+      } catch {
+        return { ok: false, message: 'Could not save bookmark (storage blocked?)' }
+      }
+    },
+    [captureSnapshot, refreshBookmarks],
+  )
+
+  const quickBookmark = useCallback(() => saveBookmarkNamed(''), [saveBookmarkNamed])
+
+  const restoreBookmark = useCallback(
+    (id: string) => {
+      const bookmark = getSceneBookmark(id)
+      if (!bookmark) return { ok: false, message: 'Bookmark not found' }
+      snapshotAppliedRef.current = false
+      setPendingSnapshot(bookmark.snapshot)
+      setState((s) => ({
+        ...s,
+        statusMessage: `Restoring bookmark · ${bookmark.name}`,
+      }))
+      return { ok: true, message: `Restoring “${bookmark.name}”…` }
+    },
+    [],
+  )
+
+  const renameBookmark = useCallback(
+    (id: string, name: string) => {
+      const updated = renameSceneBookmark(id, name)
+      if (!updated) return { ok: false, message: 'Rename failed' }
+      refreshBookmarks()
+      return { ok: true, message: `Renamed to “${updated.name}”` }
+    },
+    [refreshBookmarks],
+  )
+
+  const removeBookmark = useCallback(
+    (id: string) => {
+      const ok = deleteSceneBookmark(id)
+      if (!ok) return { ok: false, message: 'Delete failed' }
+      refreshBookmarks()
+      return { ok: true, message: 'Bookmark deleted' }
+    },
+    [refreshBookmarks],
+  )
+
   const trackSkillById = useMemo(
     () => Object.fromEntries(live.trackSkills.map((s) => [s.trackId, s.composite])),
     [live.trackSkills],
@@ -779,6 +845,7 @@ export default function App() {
             onExportJson={exportSceneJson}
             onCopyLink={copyShareLink}
             onImportText={importSceneText}
+            onQuickBookmark={quickBookmark}
           />
           <InfoPanel
             open={state.panelOpen}
@@ -795,6 +862,7 @@ export default function App() {
             compareVolumes={compareVolumes}
             trackSkills={live.trackSkills}
             trackSkillSummary={live.trackSkillSummary}
+            bookmarks={bookmarks}
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
             }
@@ -815,6 +883,11 @@ export default function App() {
             onRemoveCompare={removeFromCompare}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
+            onRefreshBookmarks={refreshBookmarks}
+            onSaveBookmark={saveBookmarkNamed}
+            onRestoreBookmark={restoreBookmark}
+            onRenameBookmark={renameBookmark}
+            onDeleteBookmark={removeBookmark}
           />
           <TimelineBar
             viewMode={state.viewMode}

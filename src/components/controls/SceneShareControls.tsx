@@ -5,6 +5,7 @@ interface SceneShareControlsProps {
   onExportJson: () => void
   onCopyLink: () => Promise<boolean> | boolean
   onImportText: (text: string) => { ok: boolean; message: string }
+  onQuickBookmark: () => { ok: boolean; message: string }
 }
 
 export function SceneShareControls({
@@ -12,6 +13,7 @@ export function SceneShareControls({
   onExportJson,
   onCopyLink,
   onImportText,
+  onQuickBookmark,
 }: SceneShareControlsProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -50,6 +52,18 @@ export function SceneShareControls({
         }}
       >
         Copy share link
+      </button>
+      <button
+        type="button"
+        className="primary"
+        disabled={disabled || busy}
+        title="Save a named bookmark of this scene in local browser storage"
+        onClick={() => {
+          const result = onQuickBookmark()
+          flash(result.message)
+        }}
+      >
+        Save bookmark
       </button>
       <button
         type="button"

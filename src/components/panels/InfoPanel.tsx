@@ -1,5 +1,6 @@
 import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
+import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
   ReconstructionTarget,
   StormTrack,
@@ -11,6 +12,7 @@ import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapt
 import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
 import { TrackSkillCard } from '../scientific/TrackSkillCard'
+import { SceneBookmarkGallery } from '../controls/SceneBookmarkGallery'
 
 interface InfoPanelProps {
   open: boolean
@@ -23,6 +25,7 @@ interface InfoPanelProps {
   compareVolumes: ReconstructionTarget[]
   trackSkills: TrackSkillScore[]
   trackSkillSummary: TrackSkillSummary | null
+  bookmarks: SceneBookmarkListItem[]
   radarLabel: string | null
   tracksLoading: boolean
   lightningConfigured: boolean
@@ -41,6 +44,11 @@ interface InfoPanelProps {
   onRemoveCompare: (trackId: string) => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
+  onRefreshBookmarks: () => void
+  onSaveBookmark: (name: string) => { ok: boolean; message: string }
+  onRestoreBookmark: (id: string) => { ok: boolean; message: string }
+  onRenameBookmark: (id: string, name: string) => { ok: boolean; message: string }
+  onDeleteBookmark: (id: string) => { ok: boolean; message: string }
 }
 
 export function InfoPanel({
@@ -54,6 +62,7 @@ export function InfoPanel({
   compareVolumes,
   trackSkills,
   trackSkillSummary,
+  bookmarks,
   radarLabel,
   tracksLoading,
   lightningConfigured,
@@ -72,6 +81,11 @@ export function InfoPanel({
   onRemoveCompare,
   onReturnGlobe,
   onSelectTrack,
+  onRefreshBookmarks,
+  onSaveBookmark,
+  onRestoreBookmark,
+  onRenameBookmark,
+  onDeleteBookmark,
 }: InfoPanelProps) {
   if (!open) return null
   const selected = tracks.find((t) => t.id === selectedTrackId) ?? null
@@ -234,6 +248,16 @@ export function InfoPanel({
               </table>
             </div>
           )}
+
+          <SceneBookmarkGallery
+            disabled={loading}
+            bookmarks={bookmarks}
+            onRefresh={onRefreshBookmarks}
+            onSave={onSaveBookmark}
+            onRestore={onRestoreBookmark}
+            onRename={onRenameBookmark}
+            onDelete={onDeleteBookmark}
+          />
 
           <TrackSkillCard score={selectedSkill} summary={trackSkillSummary} />
 
