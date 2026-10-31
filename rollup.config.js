@@ -114,6 +114,8 @@ export default {
                 port: 9999,
                 headers: {
                     'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                    'Access-Control-Allow-Private-Network': 'true',
                 },
                 https: {
                     key: localhostKey,

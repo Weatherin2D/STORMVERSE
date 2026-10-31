@@ -25,4 +25,6 @@ https://localhost:9999/plugin.js
 
 The dev server uses a self-signed certificate for `localhost`. The first time you open the plugin URL, the browser warns you. Choose **Advanced**, then **Proceed to localhost**. If that link is not there, click the warning page and type `thisisunsafe`.
 
+Windy loads that file from `https://www.windy.com`, so the server also allows local-network access. If Chrome asks whether Windy can connect to devices on your local network, choose **Allow**. The address in developer mode must be exactly `https://localhost:9999/plugin.js`.
+
 `npm test` checks the recolour rules. `npm run build` writes `dist/plugin.js`.
