@@ -22,6 +22,7 @@ import {
 import type { IconMask } from './icons';
 import { colorizePixels, encodingMax, formatRiskValue, riskTileUrl } from './risk';
 import type { RiskProduct } from './risk';
+import { installRiskMenu, syncRiskMenu } from './riskMenu';
 import { defaults, loadSettings, saveSettings } from './settings';
 import type { IconKind, Kind, Settings } from './settings';
 
@@ -746,6 +747,7 @@ let riskSig = '';
 let riskWanted = false;
 let riskPointer: ((text: string) => void) | null = null;
 let riskNotice: ((text: string) => void) | null = null;
+let riskUi: (() => void) | null = null;
 let riskMoveBound = false;
 let riskViewBound = false;
 let riskTileWarned = false;
@@ -763,6 +765,26 @@ export function watchRiskNotice(cb: (text: string) => void): () => void {
     return () => {
         if (riskNotice === cb) riskNotice = null;
     };
+}
+
+export function watchRiskUi(cb: () => void): () => void {
+    riskUi = cb;
+    return () => {
+        if (riskUi === cb) riskUi = null;
+    };
+}
+
+function pickRiskFromMenu(product: RiskProduct) {
+    settings.risk.active = settings.risk.active === product ? null : product;
+    riskUi?.();
+    commit();
+}
+
+function dismissRiskFromMenu() {
+    if (!settings.risk.active) return;
+    settings.risk.active = null;
+    riskUi?.();
+    commit();
 }
 
 function riskSignature(): string {
@@ -1123,6 +1145,7 @@ export function apply() {
     applyLineVisibility();
     KINDS.forEach(applyKind);
     applyRiskLayer();
+    syncRiskMenu();
     const nextSig = JSON.stringify(recolorRules);
     if (nextSig === lastRuleSig && nextSig === previousSig) return;
     const hadRules = lastRuleSig !== '' && lastRuleSig !== '[]';
@@ -1152,6 +1175,7 @@ let shaderTimer = 0;
 
 export function start() {
     riskWanted = true;
+    installRiskMenu(settings, pickRiskFromMenu, dismissRiskFromMenu);
     try {
         performance.setResourceTimingBufferSize?.(2000);
     } catch {
@@ -1191,14 +1215,12 @@ export function start() {
 }
 
 export function stop() {
-    riskWanted = false;
     try {
         (map as any)?.off?.('mousemove', onRiskMove);
     } catch {
         /* ignore */
     }
     riskMoveBound = false;
-    removeRiskLayer();
 }
 
 /* ------------------------------------------------------------------ */

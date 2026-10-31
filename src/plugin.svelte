@@ -2,6 +2,7 @@
     <p class="status" aria-live="polite">{status}</p>
 
     <h3>Risk</h3>
+    <small class="note">These products are in the layer menu, under Rain, snow. Choose one there, or here.</small>
     <div class="block">
         <label class="row">
             <input type="radio" name="risk-product" checked={activeRisk === null} on:change={() => chooseRisk(null)} />
@@ -286,6 +287,7 @@
         stop,
         watchRiskNotice,
         watchRiskPointer,
+        watchRiskUi,
     } from './engine';
     import type { IconKind, Kind, ScanResult } from './engine';
     import { formatRiskValue, formatScale, legendGradient, parseScale, RISK_LABELS, RISK_NOTES, RISK_PRODUCTS, riskTileUrl } from './risk';
@@ -505,11 +507,15 @@
         const unnote = watchRiskNotice(text => {
             riskNote = text;
         });
+        const unui = watchRiskUi(() => {
+            s = s;
+        });
         refreshInfo();
         s = settings;
         return () => {
             unwatch();
             unnote();
+            unui();
             stop();
         };
     });
