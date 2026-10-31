@@ -989,7 +989,19 @@ function ensureGridRiskLayer(): boolean {
         riskLayer = null;
         return false;
     }
+    liftRiskLayer(riskLayer);
     return true;
+}
+
+/** Weather tiles in the tile pane sit under the basemap. Keep this layer in a pane above it. */
+function liftRiskLayer(layer: any) {
+    const container: HTMLElement | null = layer?.getContainer?.() ?? layer?._container ?? null;
+    if (!container) return;
+    const m = map as any;
+    const pane: HTMLElement | null = m?.getPane?.(ensureRiskPane()) ?? m?.getPanes?.()?.overlayPane ?? null;
+    if (pane && container.parentElement !== pane) pane.appendChild(container);
+    container.style.zIndex = '450';
+    container.style.pointerEvents = 'none';
 }
 
 function bindRiskView() {
@@ -1111,6 +1123,7 @@ function applyRiskLayer() {
         riskNotice?.('This map cannot draw an extra tile layer.');
         return;
     }
+    if (!riskRoot) liftRiskLayer(riskLayer);
     bindRiskPointer();
     if (!existing) {
         riskSig = sig;

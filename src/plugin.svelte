@@ -2,7 +2,7 @@
     <p class="status" aria-live="polite">{status}</p>
 
     <h3>Risk</h3>
-    <small class="note">These products are at the end of Rain, snow in the layer menu. Choose one there, or here.</small>
+    <small class="note">These products are listed under the Rain, snow tiles in the layer menu. Choose one there, or here.</small>
     <div class="block">
         <label class="row">
             <input type="radio" name="risk-product" checked={activeRisk === null} on:change={() => chooseRisk(null)} />

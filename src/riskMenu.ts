@@ -5,7 +5,6 @@ import type { Settings } from './settings';
 
 let settings: Settings | null = null;
 
-const FALLBACK_ID = 'wms-risk-fallback';
 const MENU_ID = 'wms-risk-menu';
 const PLUGIN_NAME = 'windy-plugin-map-style';
 
@@ -175,24 +174,11 @@ async function attachGroups() {
         schedulePaint();
     }
 
-function nudge(key: string) {
-    const current = store.get(key);
-    if (!Array.isArray(current) || typeof (store as { set?: (k: string, v: unknown) => void }).set !== 'function') return;
-    (store as { set: (k: string, v: unknown) => void }).set(key, current.slice());
-}
-
 function scheduleRefresh() {
     window.clearTimeout(refreshTimer);
     refreshTimer = window.setTimeout(() => {
-        try {
-            const sig = menuSig();
-            if (sig === paintedSig) return;
-            paintedSig = sig;
-            nudge('favOverlaysDesktop');
-            nudge('favOverlaysMobile');
-        } catch {
-            /* the tiles still appear the next time the menu is created */
-        }
+        paintedSig = menuSig();
+        schedulePaint();
     }, 30);
 }
 
@@ -202,8 +188,12 @@ function ensureStyle() {
     const style = document.createElement('style');
     style.id = id;
     style.textContent = [
-        '#wms-risk-fallback .wms-risk-item{height:auto;min-height:95px;color:inherit;cursor:pointer}',
-        '#wms-risk-fallback .wms-risk-item .rounded-box{border-radius:8px}',
+        '#wms-risk-menu{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,80px);width:100%;position:relative;z-index:2}',
+        '#device-mobile #wms-risk-menu,#device-mobile #wms-risk-menu .wms-risk-tiles{grid-template-columns:repeat(3,80px)}',
+        '#wms-risk-menu .wms-risk-heading{grid-column:1 / -1;margin:10px 0 4px 5px;font-size:13px;letter-spacing:.02em;opacity:.85}',
+        '#wms-risk-menu .wms-risk-tiles{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,80px)}',
+        '#wms-risk-menu .wms-risk-item{height:auto;min-height:95px;color:inherit;cursor:pointer}',
+        '#wms-risk-menu .wms-risk-item .rounded-box{border-radius:8px;background-size:cover;background-position:center}',
     ].join('');
     document.head.appendChild(style);
 }
@@ -251,41 +241,62 @@ function fillGrid(grid: HTMLElement) {
     markSelected(grid);
 }
 
-function hasOfficial(root: ParentNode): boolean {
-    const hit = root.querySelector(`[data-ident="${RISK_MENU_IDENTS.convective}"]`);
-    return Boolean(hit && !hit.closest(`#${FALLBACK_ID}`));
+function shown(element: Element): boolean {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 20 && rect.height > 20;
+}
+
+/** Windy's own tile, when the layer list actually drew it. */
+function officialTile(): HTMLElement | null {
+    for (const node of document.querySelectorAll<HTMLElement>(`[data-ident="${RISK_MENU_IDENTS.convective}"]`)) {
+        if (node.closest(`#${MENU_ID}`)) continue;
+        if (shown(node)) return node;
+    }
+    return null;
+}
+
+/** The Rain, snow thumbnail grid that is on screen. */
+function rainGrid(): HTMLElement | null {
+    for (const node of document.querySelectorAll<HTMLElement>('[data-ident="rain"]')) {
+        const grid = node.closest('.overlay-thumbnails');
+        if (!(grid instanceof HTMLElement) || grid.id === MENU_ID) continue;
+        if (shown(grid)) return grid;
+    }
+    return null;
 }
 
 /**
- * The layer list is a Svelte each-block. Nodes inserted between its categories get
- * removed, and removing them from here used to abort the plugin while it was opening.
- * This block is appended after that list, and only while the real tiles are absent.
+ * Drawn inside Rain, snow, on the next full row. The category list is a Svelte block;
+ * this node stays after that block's own tiles instead of being inserted between categories.
  */
-function ensureFallback(root: HTMLElement) {
-    if (hasOfficial(root)) {
-        document.getElementById(FALLBACK_ID)?.remove();
+function ensureInRainGrid() {
+    if (officialTile()) {
+        document.getElementById(MENU_ID)?.remove();
         return;
     }
+    const host = rainGrid();
+    if (!host) return;
     ensureStyle();
-    let block = document.getElementById(FALLBACK_ID);
-    if (!block) {
-        block = document.createElement('div');
-        block.id = FALLBACK_ID;
-        const title = document.createElement('div');
-        title.className = 'category-title disabled inlined mb-10 ml-5 size-xs mt-20';
-        title.textContent = 'Risk';
-        const grid = document.createElement('div');
+    let grid = document.getElementById(MENU_ID);
+    if (!grid || grid.parentElement !== host) {
+        grid?.remove();
+        grid = document.createElement('div');
         grid.id = MENU_ID;
-        grid.className = 'overlay-thumbnails';
-        block.append(title, grid);
-        fillGrid(grid);
-        root.appendChild(block);
+        const title = document.createElement('div');
+        title.className = 'wms-risk-heading';
+        title.textContent = 'Risk';
+        grid.append(title);
+        const tiles = document.createElement('div');
+        tiles.className = 'wms-risk-tiles';
+        grid.append(tiles);
+        host.appendChild(grid);
+        fillGrid(tiles);
         return;
     }
-    const grid = block.querySelector<HTMLElement>(`#${MENU_ID}`);
-    if (!grid) return;
-    if (grid.dataset.stops !== stopsSig()) fillGrid(grid);
-    else markSelected(grid);
+    const tiles = grid.querySelector<HTMLElement>('.wms-risk-tiles');
+    if (!tiles) return;
+    if (tiles.dataset.stops !== stopsSig()) fillGrid(tiles);
+    else markSelected(tiles);
 }
 
 /** Windy only listens on the words "Map style", not the palette icon. */
@@ -316,8 +327,7 @@ function paintMenu() {
     painting = true;
     try {
         widenMapStyleHitTarget();
-        const root = document.querySelector<HTMLElement>('.menu-items-desktop');
-        if (root) ensureFallback(root);
+        ensureInRainGrid();
     } catch {
         /* opening the plugin must not depend on the menu */
     } finally {
@@ -333,12 +343,12 @@ function schedulePaint() {
 function menuWasTouched(record: MutationRecord): boolean {
     const target = record.target;
     if (target instanceof Element) {
-        if (target.closest(`#${FALLBACK_ID}`)) return false;
+        if (target.closest(`#${MENU_ID}`)) return false;
         if (target.closest('.menu-items-desktop, .menu-top')) return true;
     }
     for (const node of record.addedNodes) {
         if (!(node instanceof Element)) continue;
-        if (node.id === FALLBACK_ID) continue;
+        if (node.id === MENU_ID) continue;
         if (node.matches('.menu-items-desktop, .menu-top') || node.querySelector('.menu-items-desktop, .menu-top')) return true;
     }
     return false;
@@ -373,6 +383,7 @@ export function installRiskMenu(source: Settings, pick: (product: RiskProduct) =
                 if (records.some(menuWasTouched)) schedulePaint();
             });
             observer.observe(document.body, { childList: true, subtree: true });
+            window.setInterval(schedulePaint, 700);
         }
         registerOverlays();
         void attachGroups().catch(() => {
