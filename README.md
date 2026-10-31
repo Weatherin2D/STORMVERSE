@@ -38,12 +38,15 @@ RainViewer radar mosaics, observation timeline, optional IR, Open-Meteo site con
 ### 3 — Derived tracks + science context
 Heuristic cell tracks from mosaics, CAPE/CIN, schematic cross-section with provenance.
 
-### 4 — Cell reconstruction bridge + lightning feed (current)
-- **Reconstruct cell** — selected derived track + Open-Meteo CAPE map into procedural cloud parameters (labelled procedural, not measured volume)
-- Fly-to selected cell before opening the 3D scene
-- Reconstruction preview (density / anvil / drivers) in the info panel
-- **Pluggable lightning GeoJSON feed** via `VITE_LIGHTNING_GEOJSON_URL` (points on globe; unused → unavailable)
-- Storm-view flashes prefer feed events when reconstructing a cell with a configured feed
+### 4 — Cell reconstruction bridge + lightning feed
+Selected derived track + CAPE → procedural cloud parameters; pluggable GeoJSON lightning.
+
+### 5 — Georegistered storm volume (current)
+- **Pin volume** places a procedural ray-marched cloud volume at the cell’s lat/lon on Cesium
+- Schematic core / anvil / precip cues + provenance label on the globe
+- **Volume** layer toggle; click volume to enter immersive Three.js scene
+- Same drivers as M4 (derived cell + Open-Meteo CAPE) — still labelled **procedural**, not a measured radar volume
+- Prototype volume remains pinned at the synthetic NSW focus when no cell is pinned
 
 ## Scientific integrity
 
@@ -53,23 +56,24 @@ Heuristic cell tracks from mosaics, CAPE/CIN, schematic cross-section with prove
 | Cell tracks | Derived heuristic (low confidence) |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
-| 3D cloud after “Reconstruct cell” | **Procedural**, informed by derived + model drivers |
+| Globe volume after “Pin volume” | **Procedural**, georegistered by lat/lon |
+| Immersive 3D storm | **Procedural** local scene (same drivers) |
 | Globe lightning | Direct only if you supply a licensed GeoJSON feed |
 | Prototype storm / demo bolts | Synthetic |
 
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
-- Reconstruction mapping is heuristic visualisation, not a scientific retrieval
+- Georegistered volume is visualisation, not a scientific retrieval or BoM RHI product
 - Tracks empty when Australia mosaics lack precip
-- 3D scene is still a local Three.js environment (not Cesium-georegistered volume)
+- Immersive scene remains a local Three.js environment (complements the globe volume)
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
 3. Skill scores for cell tracking
-4. True georegistered storm volume on the globe
+4. Time-animated volume following the track path
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

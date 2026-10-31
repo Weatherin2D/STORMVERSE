@@ -29,6 +29,7 @@ export default function App() {
     lat: number
     height: number
     token: number
+    oblique?: boolean
   } | null>(null)
   const [presetToken, setPresetToken] = useState(0)
   const [lightningToken, setLightningToken] = useState(0)
@@ -36,6 +37,12 @@ export default function App() {
   const [syntheticLightning, setSyntheticLightning] = useState<LightningObservation[]>([])
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
   const [reconMode, setReconMode] = useState<'prototype' | 'cell'>('prototype')
+  const [pinnedVolumeMode, setPinnedVolumeMode] = useState<'prototype' | 'cell' | null>(
+    'prototype',
+  )
+  const [pinnedVolumeSnapshot, setPinnedVolumeSnapshot] = useState(() =>
+    mapEnvironmentToReconstruction(null, null),
+  )
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -75,6 +82,14 @@ export default function App() {
     () => mapEnvironmentToReconstruction(live.environment, selectedTrack),
     [live.environment, selectedTrack],
   )
+
+  // Keep prototype pin in sync with latest CAPE; cell pin uses explicit snapshot.
+  useEffect(() => {
+    if (pinnedVolumeMode !== 'prototype') return
+    setPinnedVolumeSnapshot(mapEnvironmentToReconstruction(live.environment, null))
+  }, [live.environment, pinnedVolumeMode])
+
+  const globeVolumeTarget = pinnedVolumeMode ? pinnedVolumeSnapshot : null
 
   useEffect(() => {
     if (live.radarFrames.length === 0) return
@@ -231,21 +246,43 @@ export default function App() {
     openStormView('prototype')
   }, [openStormView])
 
+  const pinSelectedCell = useCallback(() => {
+    if (!selectedTrack) return
+    const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack)
+    setPinnedVolumeSnapshot(recon)
+    setPinnedVolumeMode('cell')
+    setState((s) => ({
+      ...s,
+      layers: { ...s.layers, volume: true },
+      statusMessage: `Pinned georegistered volume · ${recon.label} · procedural`,
+    }))
+    setFlyTarget({
+      lon: recon.longitude,
+      lat: recon.latitude,
+      height: 160_000,
+      token: Date.now(),
+      oblique: true,
+    })
+  }, [live.environment, selectedTrack])
+
   const enterSelectedCell = useCallback(() => {
     if (!selectedTrack) return
-    const head = selectedTrack.points[selectedTrack.points.length - 1]
+    const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack)
+    setPinnedVolumeSnapshot(recon)
+    setPinnedVolumeMode('cell')
     setFlyTarget({
-      lon: head.longitude,
-      lat: head.latitude,
+      lon: recon.longitude,
+      lat: recon.latitude,
       height: 380_000,
       token: Date.now(),
     })
     setState((s) => ({
       ...s,
+      layers: { ...s.layers, volume: true },
       statusMessage: `Approaching derived cell ${selectedTrack.stormId}…`,
     }))
     window.setTimeout(() => openStormView('cell'), 1400)
-  }, [openStormView, selectedTrack])
+  }, [live.environment, openStormView, selectedTrack])
 
   const returnGlobe = useCallback(() => {
     const max = Math.max(0, live.radarFrames.length - 1)
@@ -269,16 +306,20 @@ export default function App() {
 
   const approachThenEnter = useCallback(() => {
     if (state.viewMode === 'globe') {
+      const recon = mapEnvironmentToReconstruction(live.environment, null)
+      setPinnedVolumeSnapshot(recon)
+      setPinnedVolumeMode('prototype')
       setFlyStormToken((n) => n + 1)
       setState((s) => ({
         ...s,
+        layers: { ...s.layers, volume: true },
         statusMessage: 'Approaching prototype storm...',
       }))
       window.setTimeout(() => enterStorm(), 1400)
       return
     }
     enterStorm()
-  }, [enterStorm, state.viewMode])
+  }, [enterStorm, live.environment, state.viewMode])
 
   const setLayers = (partial: Partial<LayerState>) => {
     setState((s) => ({ ...s, layers: { ...s.layers, ...partial } }))
@@ -287,11 +328,13 @@ export default function App() {
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
-        ? 'Radar · derived tracks · optional lightning feed'
+        ? pinnedVolumeMode === 'cell'
+          ? 'Georegistered cell volume · procedural'
+          : 'Radar · tracks · georegistered volume'
         : reconMode === 'cell'
           ? 'Cell-informed reconstruction · not measured volume'
           : 'Prototype storm · synthetic demonstration',
-    [state.viewMode, reconMode],
+    [state.viewMode, reconMode, pinnedVolumeMode],
   )
 
   const clockLabel = useMemo(() => {
@@ -322,6 +365,7 @@ export default function App() {
             tracksLoading={live.tracksLoading}
             lightningConfigured={live.lightningConfigured}
             lightningCount={live.lightningEvents.length}
+            volumePinned={pinnedVolumeMode === 'cell'}
             hasSelectedTrack={Boolean(selectedTrack)}
             onLightingMode={(lightingMode: LightingMode) => setState((s) => ({ ...s, lightingMode }))}
             onLayers={setLayers}
@@ -335,6 +379,7 @@ export default function App() {
               setState((s) => ({ ...s, cloudParams: { ...s.cloudParams, ...partial } }))
             }
             onEnterStorm={approachThenEnter}
+            onPinSelectedCell={pinSelectedCell}
             onEnterSelectedCell={enterSelectedCell}
             onReturnGlobe={returnGlobe}
             onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
@@ -360,10 +405,12 @@ export default function App() {
             tracksLoading={live.tracksLoading}
             lightningConfigured={live.lightningConfigured}
             lightningCount={live.lightningEvents.length}
+            volumePinned={pinnedVolumeMode === 'cell'}
             loading={live.loading}
             error={live.error}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
             onEnterStorm={approachThenEnter}
+            onPinSelectedCell={pinSelectedCell}
             onEnterSelectedCell={enterSelectedCell}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
@@ -416,6 +463,8 @@ export default function App() {
           selectedTrackId={selectedTrackId}
           lightningEvents={live.lightningEvents}
           lightningVisible={state.layers.lightningObs}
+          volumeTarget={globeVolumeTarget}
+          volumeVisible={state.layers.volume}
         />
       ) : (
         <StormView

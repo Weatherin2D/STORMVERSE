@@ -21,7 +21,9 @@ interface InfoPanelProps {
   loading: boolean
   error: string | null
   onClose: () => void
+  volumePinned: boolean
   onEnterStorm: () => void
+  onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
@@ -41,8 +43,10 @@ export function InfoPanel({
   lightningCount,
   loading,
   error,
+  volumePinned,
   onClose,
   onEnterStorm,
+  onPinSelectedCell,
   onEnterSelectedCell,
   onReturnGlobe,
   onSelectTrack,
@@ -69,9 +73,9 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Select a derived cell track, then <strong>Reconstruct cell</strong> to open a procedural
-            3D storm shaped by that cell’s confidence and Open-Meteo CAPE. Lightning appears on the
-            globe only when a GeoJSON feed is configured.
+            Select a derived cell, then <strong>Pin volume</strong> to place a georegistered
+            procedural storm at that lat/lon on the globe. Use <strong>Enter immersive</strong> for
+            the local Three.js close-up. Lightning appears only when a GeoJSON feed is configured.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
@@ -131,8 +135,18 @@ export function InfoPanel({
 
           {reconstruction && selected && (
             <div className="availability">
-              <h3>Reconstruction preview</h3>
+              <h3>Georegistered volume</h3>
               <dl className="meta-grid">
+                <div>
+                  <dt>Focus</dt>
+                  <dd>
+                    {reconstruction.latitude.toFixed(2)}°, {reconstruction.longitude.toFixed(2)}°
+                  </dd>
+                </div>
+                <div>
+                  <dt>Pinned</dt>
+                  <dd>{volumePinned ? 'On globe' : 'Not yet'}</dd>
+                </div>
                 <div>
                   <dt>CAPE driver</dt>
                   <dd>
@@ -161,9 +175,14 @@ export function InfoPanel({
               <p className="provenance">
                 <strong>Provenance:</strong> {reconstruction.provenance.summary}
               </p>
-              <button type="button" className="primary" onClick={onEnterSelectedCell}>
-                Reconstruct selected cell
-              </button>
+              <div className="control-cluster wrap">
+                <button type="button" className="primary" onClick={onPinSelectedCell}>
+                  {volumePinned ? 'Update volume on globe' : 'Pin volume on globe'}
+                </button>
+                <button type="button" onClick={onEnterSelectedCell}>
+                  Enter immersive
+                </button>
+              </div>
             </div>
           )}
 

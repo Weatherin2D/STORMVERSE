@@ -25,6 +25,11 @@ import type {
   SatelliteObservation,
   StormTrack,
 } from '../../weather/types/observations'
+import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
+import {
+  createGeoregisteredVolume,
+  type GeoregisteredVolumeHandle,
+} from './GeoregisteredVolume'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 export interface GlobePick {
@@ -36,7 +41,13 @@ export interface StormverseGlobe {
   viewer: Viewer
   flyToStorm: (duration?: number) => void
   flyHome: (duration?: number) => void
-  flyToCoords: (lon: number, lat: number, height: number, duration?: number) => void
+  flyToCoords: (
+    lon: number,
+    lat: number,
+    height: number,
+    duration?: number,
+    oblique?: boolean,
+  ) => void
   setRadarFrame: (frame: RadarObservation | null) => void
   setRadarVisible: (visible: boolean) => void
   setSatelliteFrame: (frame: SatelliteObservation | null) => void
@@ -45,6 +56,8 @@ export interface StormverseGlobe {
   setTracksVisible: (visible: boolean) => void
   setLightningEvents: (events: LightningObservation[]) => void
   setLightningVisible: (visible: boolean) => void
+  setVolumeTarget: (target: ReconstructionTarget | null) => void
+  setVolumeVisible: (visible: boolean) => void
   destroy: () => void
 }
 
@@ -101,24 +114,26 @@ export async function createStormverseGlobe(
       viewer.imageryLayers.addImageryProvider(ionImagery)
     } else {
       viewer.imageryLayers.removeAll()
+      // Free Esri imagery — solid zoom coverage without an Ion token
       viewer.imageryLayers.addImageryProvider(
-        new OpenStreetMapImageryProvider({
-          url: 'https://tile.openstreetmap.org/',
+        new UrlTemplateImageryProvider({
+          url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          credit: new Credit('Tiles © Esri', true),
+          maximumLevel: 17,
         }),
       )
       const layer = viewer.imageryLayers.get(0)
       if (layer) {
-        layer.brightness = 0.9
+        layer.brightness = 0.95
         layer.contrast = 1.05
-        layer.saturation = 0.85
+        layer.saturation = 0.95
       }
     }
   } catch {
     viewer.imageryLayers.removeAll()
     viewer.imageryLayers.addImageryProvider(
-      new UrlTemplateImageryProvider({
-        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        credit: new Credit('© OpenStreetMap', true),
+      new OpenStreetMapImageryProvider({
+        url: 'https://tile.openstreetmap.org/',
       }),
     )
   }
@@ -385,25 +400,45 @@ export async function createStormverseGlobe(
     viewer.scene.requestRender()
   }
 
+  const volume: GeoregisteredVolumeHandle = createGeoregisteredVolume(viewer)
+
   const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
   handler.setInputAction((movement: { position: Cartesian2 }) => {
     const picked = viewer.scene.pick(movement.position)
     if (picked && typeof picked === 'object' && 'id' in picked) {
-      const entity = (picked as { id?: { id?: string; properties?: { trackId?: { getValue?: () => string } } } }).id
-      const entityId = entity?.id
-      if (entityId === PROTOTYPE_STORM.id) {
+      const rawId = (picked as { id?: unknown }).id
+      // Primitive GeometryInstance id is a plain string
+      if (rawId === 'stormverse-georegistered-volume') {
         options.onStormSelect?.()
         return
       }
-      const trackProp = entity?.properties?.trackId
+      const entity = (
+        picked as {
+          id?: { id?: string; properties?: { trackId?: { getValue?: () => string } } }
+        }
+      ).id
+      const entityId = typeof entity === 'string' ? entity : entity?.id
+      if (
+        entityId === PROTOTYPE_STORM.id ||
+        entityId === 'stormverse-volume-label' ||
+        entityId === 'stormverse-volume-core' ||
+        entityId === 'stormverse-volume-anvil' ||
+        entityId === 'stormverse-volume-precip'
+      ) {
+        options.onStormSelect?.()
+        return
+      }
+      const trackProp = typeof entity === 'object' ? entity?.properties?.trackId : undefined
       const trackId =
         typeof trackProp?.getValue === 'function' ? trackProp.getValue() : undefined
       if (trackId) {
         options.onTrackSelect?.(trackId)
         return
       }
-      // Fallback: parse from entity id
-      if (entityId?.startsWith('track-head-') || entityId?.startsWith('track-line-')) {
+      if (
+        typeof entityId === 'string' &&
+        (entityId.startsWith('track-head-') || entityId.startsWith('track-line-'))
+      ) {
         options.onTrackSelect?.(entityId.replace(/^track-(head|line)-/, ''))
         return
       }
@@ -449,7 +484,27 @@ export async function createStormverseGlobe(
     })
   }
 
-  const flyToCoords = (lon: number, lat: number, height: number, duration = 1.8) => {
+  const flyToCoords = (
+    lon: number,
+    lat: number,
+    height: number,
+    duration = 1.8,
+    oblique = false,
+  ) => {
+    if (oblique) {
+      // Stand south of the target and look north-down so vertical storm structure reads.
+      const offsetDeg = Math.max(0.55, height / 280_000)
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(lon, lat - offsetDeg, height),
+        orientation: {
+          heading: 0,
+          pitch: CesiumMath.toRadians(-32),
+          roll: 0,
+        },
+        duration,
+      })
+      return
+    }
     viewer.camera.flyTo({
       destination: Cartesian3.fromDegrees(lon, lat, height),
       duration,
@@ -471,7 +526,10 @@ export async function createStormverseGlobe(
     setTracksVisible,
     setLightningEvents,
     setLightningVisible,
+    setVolumeTarget: (target) => volume.setTarget(target),
+    setVolumeVisible: (v) => volume.setVisible(v),
     destroy: () => {
+      volume.destroy()
       clearTracks()
       clearLightning()
       handler.destroy()

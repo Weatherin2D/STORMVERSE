@@ -9,12 +9,19 @@ import type {
   SatelliteObservation,
   StormTrack,
 } from '../../weather'
+import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
 
 interface GlobeViewProps {
   active: boolean
   requestFlyToStorm: number
   requestFlyHome: number
-  flyTarget: { lon: number; lat: number; height: number; token: number } | null
+  flyTarget: {
+    lon: number
+    lat: number
+    height: number
+    token: number
+    oblique?: boolean
+  } | null
   onEnterStorm: () => void
   onTrackSelect: (trackId: string) => void
   radarFrame: RadarObservation | null
@@ -26,6 +33,8 @@ interface GlobeViewProps {
   selectedTrackId: string | null
   lightningEvents: LightningObservation[]
   lightningVisible: boolean
+  volumeTarget: ReconstructionTarget | null
+  volumeVisible: boolean
 }
 
 export function GlobeView({
@@ -43,6 +52,8 @@ export function GlobeView({
   selectedTrackId,
   lightningEvents,
   lightningVisible,
+  volumeTarget,
+  volumeVisible,
 }: GlobeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<StormverseGlobe | null>(null)
@@ -70,10 +81,12 @@ export function GlobeView({
         globe.setSatelliteVisible(satelliteVisible)
         globe.setTracksVisible(tracksVisible)
         globe.setLightningVisible(lightningVisible)
+        globe.setVolumeVisible(volumeVisible)
         if (radarFrame) globe.setRadarFrame(radarFrame)
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
         globe.setTracks(tracks, selectedTrackId)
         globe.setLightningEvents(lightningEvents)
+        if (volumeTarget) globe.setVolumeTarget(volumeTarget)
       })
       .catch((err) => {
         console.error('Failed to initialise Cesium globe', err)
@@ -99,7 +112,13 @@ export function GlobeView({
 
   useEffect(() => {
     if (!flyTarget || flyTarget.token === 0) return
-    globeRef.current?.flyToCoords(flyTarget.lon, flyTarget.lat, flyTarget.height)
+    globeRef.current?.flyToCoords(
+      flyTarget.lon,
+      flyTarget.lat,
+      flyTarget.height,
+      1.8,
+      flyTarget.oblique,
+    )
   }, [flyTarget])
 
   useEffect(() => {
@@ -133,6 +152,14 @@ export function GlobeView({
   useEffect(() => {
     globeRef.current?.setLightningVisible(lightningVisible)
   }, [lightningVisible])
+
+  useEffect(() => {
+    globeRef.current?.setVolumeTarget(volumeTarget)
+  }, [volumeTarget])
+
+  useEffect(() => {
+    globeRef.current?.setVolumeVisible(volumeVisible)
+  }, [volumeVisible])
 
   return <div ref={containerRef} className="viewport-layer globe-layer" />
 }

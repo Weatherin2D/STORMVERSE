@@ -17,6 +17,8 @@ export interface LayerState {
   tracks: boolean
   /** Configured lightning GeoJSON events on the globe. */
   lightningObs: boolean
+  /** Georegistered procedural storm volume on the globe. */
+  volume: boolean
 }
 
 export interface TimelineState {
@@ -57,6 +59,7 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       satellite: false,
       tracks: true,
       lightningObs: true,
+      volume: true,
     },
     cloudParams: { ...CLOUD_DEFAULTS },
     flashFreq: 0.35,

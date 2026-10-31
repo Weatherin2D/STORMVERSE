@@ -14,6 +14,7 @@ interface ExplorationControlsProps {
   tracksLoading: boolean
   lightningConfigured: boolean
   lightningCount: number
+  volumePinned: boolean
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -21,6 +22,7 @@ interface ExplorationControlsProps {
   onToggleDebug: () => void
   onCloudParams: (p: Partial<CloudParams>) => void
   onEnterStorm: () => void
+  onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
   onReturnGlobe: () => void
   onTogglePanel: () => void
@@ -48,6 +50,7 @@ export function ExplorationControls({
   tracksLoading,
   lightningConfigured,
   lightningCount,
+  volumePinned,
   onLightingMode,
   onLayers,
   onPreset,
@@ -55,6 +58,7 @@ export function ExplorationControls({
   onToggleDebug,
   onCloudParams,
   onEnterStorm,
+  onPinSelectedCell,
   onEnterSelectedCell,
   onReturnGlobe,
   onTogglePanel,
@@ -74,10 +78,18 @@ export function ExplorationControls({
               type="button"
               className="primary"
               disabled={!hasSelectedTrack}
-              title="Open 3D reconstruction informed by the selected derived cell + CAPE"
+              title="Place a georegistered procedural volume at the selected derived cell"
+              onClick={onPinSelectedCell}
+            >
+              {volumePinned ? 'Update volume' : 'Pin volume'}
+            </button>
+            <button
+              type="button"
+              disabled={!hasSelectedTrack}
+              title="Open immersive Three.js reconstruction for the selected cell"
               onClick={onEnterSelectedCell}
             >
-              Reconstruct cell
+              Enter immersive
             </button>
           </>
         ) : (
@@ -119,6 +131,14 @@ export function ExplorationControls({
             onClick={() => onLayers({ tracks: !layers.tracks })}
           >
             {tracksLoading ? 'Tracks…' : 'Cell tracks'}
+          </button>
+          <button
+            type="button"
+            className={layers.volume ? 'active' : ''}
+            title="Georegistered procedural storm volume (not a measured radar volume)"
+            onClick={() => onLayers({ volume: !layers.volume })}
+          >
+            Volume
           </button>
           <button
             type="button"
