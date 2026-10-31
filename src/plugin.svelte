@@ -81,9 +81,9 @@
         </div>
     {/each}
     <small class="note">
-        Coastlines and borders come from the same tiles. The outline colour is a casing and the border colour is drawn
-        on top. Make the outline thicker than the border to see the casing. Either colour on its own paints the whole
-        line. Label colour changes the place names. The background colour replaces Windy's land and sea fill.
+        Windy draws coastlines, borders, rivers and streams in one image. Each row below is one of those line strengths,
+        with its own colour and thickness. Coasts and country borders are the strongest lines. A river can join a stronger
+        group when you zoom in. Label colour changes the place names. The background colour replaces Windy's land and sea fill.
     </small>
 
     <h3>Weather icons</h3>
@@ -127,7 +127,7 @@
             <small class="note">No layers were readable. Copy the report and send it back so the engine can be adjusted.</small>
         {/if}
         {#each scanResult.layers as layer}
-            <div class="row tight">
+            <div class="row tight wrap">
                 <span class="grow mono">{layer.id} <small>{layer.type}</small></span>
                 {#each KINDS as kind}
                     <button
@@ -144,7 +144,7 @@
 
         <h4>Map image sources ({scanResult.tilePrefixes.length})</h4>
         {#each scanResult.tilePrefixes as t}
-            <div class="row tight">
+            <div class="row tight wrap">
                 <span class="grow mono path">{shortUrl(t.prefix)} <small>{t.count} tiles</small></span>
                 {#each KINDS as kind}
                     <button
@@ -177,7 +177,7 @@
             </div>
         {/each}
         <small class="note">
-            Letters: O outlines, B borders, L labels for map entries; Li lightning, Sn snow, Ha hail for images.
+            Letters: C coasts, G regional, R rivers, S streams, L labels; Li lightning, Sn snow, Ha hail for images.
         </small>
     {/if}
 </section>
@@ -203,14 +203,16 @@
     let status = '';
     let diagText = '';
     let scanResult: ScanResult | null = null;
-    let layerInfo: Record<Kind, string> = { outlines: '', borders: '', labels: '' };
+    let layerInfo: Record<Kind, string> = { major: '', regional: '', rivers: '', streams: '', labels: '' };
 
     const kindLabels: Record<Kind, string> = {
-        outlines: 'Land and water outlines',
-        borders: 'Country and state borders',
+        major: 'Coastlines and country borders',
+        regional: 'Regional borders and major rivers',
+        rivers: 'Rivers and lakes',
+        streams: 'Streams and creeks',
         labels: 'Labels',
     };
-    const kindShort: Record<Kind, string> = { outlines: 'O', borders: 'B', labels: 'L' };
+    const kindShort: Record<Kind, string> = { major: 'C', regional: 'G', rivers: 'R', streams: 'S', labels: 'L' };
     const iconLabels: Record<IconKind, string> = { lightning: 'Lightning', snow: 'Snow', hail: 'Hail' };
     const iconShort: Record<IconKind, string> = { lightning: 'Li', snow: 'Sn', hail: 'Ha' };
 

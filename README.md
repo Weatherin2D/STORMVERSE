@@ -1,11 +1,11 @@
 # Map style for Windy
 
-A [Windy.com](https://www.windy.com) plugin that changes the colour of the basemap: land and sea fill, coastlines and borders, and place-name labels.
+A [Windy.com](https://www.windy.com) plugin that changes the basemap: land and sea fill, and the colour and thickness of coastlines, borders, rivers and streams, plus place-name labels.
 
 Windy draws those in three different places, and an earlier version of this plugin missed all three:
 
 - Land and sea fill is a WebGL shader with the colours written into the program, so a normal map paint property never reaches it.
-- Coastlines and borders are images that Windy decodes once and keeps in memory. Recolouring later downloads does nothing until those cached images are dropped.
+- Coastlines, borders, rivers and streams are drawn together in one image that Windy decodes once and keeps in memory. Recolouring later downloads does nothing until those cached images are dropped. The plugin separates those lines by how strong they are.
 - Place names are HTML text, not pixels in a tile.
 
 Picking a colour now updates the part of the map that colour belongs to. Settings are saved in the browser.

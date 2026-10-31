@@ -1,4 +1,4 @@
-export type Kind = 'outlines' | 'borders' | 'labels';
+export type Kind = 'major' | 'regional' | 'rivers' | 'streams' | 'labels';
 export type IconKind = 'lightning' | 'snow' | 'hail';
 export type InkTarget = 'all' | 'dark' | 'light';
 
@@ -49,8 +49,10 @@ export const defaults = (): Settings => ({
     version: 1,
     background: { enabled: false, color: '#1b2430', hideWindyFill: false },
     kinds: {
-        outlines: kind('#ffffff', 'all'),
-        borders: kind('#ffd166', 'all'),
+        major: kind('#ffffff', 'all'),
+        regional: kind('#ffd166', 'all'),
+        rivers: kind('#3d9ee8', 'all'),
+        streams: kind('#8aa0b4', 'all'),
         labels: kind('#ffffff', 'dark'),
     },
     icons: {
@@ -77,10 +79,22 @@ function merge<T>(base: T, over: any): T {
     return out;
 }
 
+function migrateKinds(parsed: any) {
+    const kinds = parsed?.kinds;
+    if (!kinds || typeof kinds !== 'object') return;
+    if (kinds.outlines && !kinds.major) kinds.major = kinds.outlines;
+    if (kinds.borders && !kinds.regional) kinds.regional = kinds.borders;
+    delete kinds.outlines;
+    delete kinds.borders;
+}
+
 export function loadSettings(): Settings {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? merge(defaults(), JSON.parse(raw)) : defaults();
+        if (!raw) return defaults();
+        const parsed = JSON.parse(raw);
+        migrateKinds(parsed);
+        return merge(defaults(), parsed);
     } catch {
         return defaults();
     }

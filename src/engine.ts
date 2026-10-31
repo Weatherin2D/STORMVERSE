@@ -2,7 +2,7 @@ import { map, toggleLandSeaMaskColored } from '@windy/map';
 import {
     fragmentForBackground,
     hexToRgb,
-    isAutoBasemapTile,
+    isLineArtTile,
     labelCss,
     recolorImageData,
     rulesForUrl,
@@ -17,15 +17,16 @@ export type { RecolorRule };
 
 const win = window as any;
 
-export const KINDS: Kind[] = ['outlines', 'borders', 'labels'];
+export const LINE_KINDS: Kind[] = ['major', 'regional', 'rivers', 'streams'];
+export const KINDS: Kind[] = [...LINE_KINDS, 'labels'];
 export const ICONS: IconKind[] = ['lightning', 'snow', 'hail'];
 
 /** Mutable, shared with the UI. Call commit() after changing it. */
 export const settings: Settings = loadSettings();
 
 const STYLE_ELEMENT_ID = 'windy-plugin-map-style';
-const FETCH_VERSION = 5;
-const IMAGE_PATCH_VERSION = 5;
+const FETCH_VERSION = 6;
+const IMAGE_PATCH_VERSION = 6;
 
 /* ------------------------------------------------------------------ */
 /* Map access                                                          */
@@ -64,8 +65,10 @@ export function listLayers(): LayerInfo[] {
 const WEATHER = /weather|particle|radar|satellite|overlay|isoline|hurricane|airspace|main|mask|poi/i;
 const PATTERNS: [Kind, RegExp][] = [
     ['labels', /label|place|name|city|text/i],
-    ['borders', /border|bound|countr|state|admin|province/i],
-    ['outlines', /coast|outline|shore|water|sea|ocean|lake|land/i],
+    ['major', /coast|country|outline|shore/i],
+    ['regional', /border|bound|admin|province|state/i],
+    ['rivers', /river|lake|water/i],
+    ['streams', /stream|creek/i],
 ];
 
 function classify(id: string): Kind | null {
@@ -331,7 +334,7 @@ function installCachePatch() {
 
 function shouldDropTile(url: string): boolean {
     if (!url || url.includes('/grayland/')) return false;
-    if (isAutoBasemapTile(url)) return true;
+    if (isLineArtTile(url)) return true;
     const manuals: string[] = win.__wmsManualPrefixes ?? [];
     return manuals.some(prefix => prefix && url.startsWith(prefix));
 }
@@ -419,12 +422,13 @@ const originalPaint = new Map<string, unknown>();
 
 function rebuildRules() {
     recolorRules = [];
-    for (const kind of ['outlines', 'borders'] as const) {
+    for (const kind of LINE_KINDS) {
         const chosen = settings.kinds[kind];
-        if (!chosen.touched || !chosen.recolor) continue;
+        if (!chosen.touched || (chosen.visible && !chosen.recolor)) continue;
         const manual = chosen.tilePrefix ? abs(chosen.tilePrefix) : '';
         recolorRules.push({
-            kind,
+            kind: kind as RecolorRule['kind'],
+            hidden: !chosen.visible,
             prefixes: manual ? [manual] : [],
             color: hexToRgb(safeHex(chosen.color) ?? '#ffffff'),
             ink: chosen.ink,
@@ -545,11 +549,10 @@ function applyKind(kind: Kind) {
 }
 
 function applyLineVisibility() {
-    const outlines = settings.kinds.outlines;
-    const borders = settings.kinds.borders;
-    if (!outlines.touched && !borders.touched) return;
+    const lines = LINE_KINDS.map(kind => settings.kinds[kind]);
+    if (!lines.some(line => line.touched)) return;
     try {
-        ml()?.setLayoutProperty?.('raster-basemap', 'visibility', outlines.visible || borders.visible ? 'visible' : 'none');
+        ml()?.setLayoutProperty?.('raster-basemap', 'visibility', lines.some(line => line.visible) ? 'visible' : 'none');
     } catch {
         /* custom layers ignore visibility on some builds */
     }
