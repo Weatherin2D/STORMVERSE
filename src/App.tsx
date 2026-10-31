@@ -12,6 +12,7 @@ import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
 import {
+  interpolateTrackAtCursor,
   mapEnvironmentToReconstruction,
   prototypeProvider,
   type LightningObservation,
@@ -43,6 +44,9 @@ export default function App() {
   const [pinnedVolumeSnapshot, setPinnedVolumeSnapshot] = useState(() =>
     mapEnvironmentToReconstruction(null, null),
   )
+  /** When true, pinned cell volume follows the derived track through observation time. */
+  const [followTrack, setFollowTrack] = useState(true)
+  const [chaseVolume, setChaseVolume] = useState(false)
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -83,13 +87,60 @@ export default function App() {
     [live.environment, selectedTrack],
   )
 
-  // Keep prototype pin in sync with latest CAPE; cell pin uses explicit snapshot.
+  // Keep prototype pin in sync with latest CAPE; cell pin uses explicit snapshot / track animation.
   useEffect(() => {
     if (pinnedVolumeMode !== 'prototype') return
     setPinnedVolumeSnapshot(mapEnvironmentToReconstruction(live.environment, null))
   }, [live.environment, pinnedVolumeMode])
 
-  const globeVolumeTarget = pinnedVolumeMode ? pinnedVolumeSnapshot : null
+  const animatedCellVolume = useMemo(() => {
+    if (pinnedVolumeMode !== 'cell' || !followTrack || !selectedTrack) return null
+    if (live.radarFrames.length === 0) return null
+    const pose = interpolateTrackAtCursor(
+      selectedTrack,
+      live.radarFrames,
+      state.timeline.cursor,
+    )
+    return mapEnvironmentToReconstruction(live.environment, selectedTrack, pose)
+  }, [
+    pinnedVolumeMode,
+    followTrack,
+    selectedTrack,
+    live.radarFrames,
+    live.environment,
+    state.timeline.cursor,
+  ])
+
+  const globeVolumeTarget =
+    pinnedVolumeMode === 'cell' && animatedCellVolume
+      ? animatedCellVolume
+      : pinnedVolumeMode
+        ? pinnedVolumeSnapshot
+        : null
+
+  // Optional gentle chase camera while the volume walks the track
+  const lastChaseRef = useRef(0)
+  useEffect(() => {
+    if (!chaseVolume || !followTrack || pinnedVolumeMode !== 'cell') return
+    if (!globeVolumeTarget || state.viewMode !== 'globe') return
+    const now = performance.now()
+    if (now - lastChaseRef.current < 2200) return
+    lastChaseRef.current = now
+    setFlyTarget({
+      lon: globeVolumeTarget.longitude,
+      lat: globeVolumeTarget.latitude,
+      height: 160_000,
+      token: Date.now(),
+      oblique: true,
+    })
+  }, [
+    chaseVolume,
+    followTrack,
+    pinnedVolumeMode,
+    globeVolumeTarget?.longitude,
+    globeVolumeTarget?.latitude,
+    state.viewMode,
+  ])
 
   useEffect(() => {
     if (live.radarFrames.length === 0) return
@@ -248,13 +299,19 @@ export default function App() {
 
   const pinSelectedCell = useCallback(() => {
     if (!selectedTrack) return
-    const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack)
+    const pose = interpolateTrackAtCursor(
+      selectedTrack,
+      live.radarFrames,
+      state.timeline.cursor,
+    )
+    const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack, pose)
     setPinnedVolumeSnapshot(recon)
     setPinnedVolumeMode('cell')
+    setFollowTrack(true)
     setState((s) => ({
       ...s,
       layers: { ...s.layers, volume: true },
-      statusMessage: `Pinned georegistered volume · ${recon.label} · procedural`,
+      statusMessage: `Pinned volume · follows track with observation time · procedural`,
     }))
     setFlyTarget({
       lon: recon.longitude,
@@ -263,7 +320,7 @@ export default function App() {
       token: Date.now(),
       oblique: true,
     })
-  }, [live.environment, selectedTrack])
+  }, [live.environment, live.radarFrames, selectedTrack, state.timeline.cursor])
 
   const enterSelectedCell = useCallback(() => {
     if (!selectedTrack) return
@@ -328,13 +385,15 @@ export default function App() {
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
-        ? pinnedVolumeMode === 'cell'
-          ? 'Georegistered cell volume · procedural'
-          : 'Radar · tracks · georegistered volume'
+        ? pinnedVolumeMode === 'cell' && followTrack
+          ? 'Volume follows derived track · procedural'
+          : pinnedVolumeMode === 'cell'
+            ? 'Georegistered cell volume · procedural'
+            : 'Radar · tracks · georegistered volume'
         : reconMode === 'cell'
           ? 'Cell-informed reconstruction · not measured volume'
           : 'Prototype storm · synthetic demonstration',
-    [state.viewMode, reconMode, pinnedVolumeMode],
+    [state.viewMode, reconMode, pinnedVolumeMode, followTrack],
   )
 
   const clockLabel = useMemo(() => {
@@ -366,6 +425,8 @@ export default function App() {
             lightningConfigured={live.lightningConfigured}
             lightningCount={live.lightningEvents.length}
             volumePinned={pinnedVolumeMode === 'cell'}
+            followTrack={followTrack}
+            chaseVolume={chaseVolume}
             hasSelectedTrack={Boolean(selectedTrack)}
             onLightingMode={(lightingMode: LightingMode) => setState((s) => ({ ...s, lightingMode }))}
             onLayers={setLayers}
@@ -381,6 +442,8 @@ export default function App() {
             onEnterStorm={approachThenEnter}
             onPinSelectedCell={pinSelectedCell}
             onEnterSelectedCell={enterSelectedCell}
+            onFollowTrack={setFollowTrack}
+            onChaseVolume={setChaseVolume}
             onReturnGlobe={returnGlobe}
             onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
             onDemoLightning={() => {
@@ -397,7 +460,9 @@ export default function App() {
             tracks={live.tracks}
             selectedTrackId={selectedTrackId}
             reconstruction={
-              state.viewMode === 'storm' ? reconstruction : previewReconstruction
+              state.viewMode === 'storm'
+                ? reconstruction
+                : globeVolumeTarget ?? previewReconstruction
             }
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
@@ -406,12 +471,14 @@ export default function App() {
             lightningConfigured={live.lightningConfigured}
             lightningCount={live.lightningEvents.length}
             volumePinned={pinnedVolumeMode === 'cell'}
+            followTrack={followTrack}
             loading={live.loading}
             error={live.error}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
             onEnterStorm={approachThenEnter}
             onPinSelectedCell={pinSelectedCell}
             onEnterSelectedCell={enterSelectedCell}
+            onFollowTrack={setFollowTrack}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
           />
@@ -421,7 +488,9 @@ export default function App() {
             clockLabel={clockLabel}
             note={
               state.viewMode === 'globe'
-                ? 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
+                ? followTrack && pinnedVolumeMode === 'cell'
+                  ? 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
+                  : 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
                 : reconMode === 'cell'
                   ? 'Prototype animation clock for a cell-informed reconstruction — not observation time.'
                   : 'Controls synthetic storm animation — not real-time weather observations.'

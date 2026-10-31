@@ -15,6 +15,8 @@ interface ExplorationControlsProps {
   lightningConfigured: boolean
   lightningCount: number
   volumePinned: boolean
+  followTrack: boolean
+  chaseVolume: boolean
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -24,6 +26,8 @@ interface ExplorationControlsProps {
   onEnterStorm: () => void
   onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
+  onFollowTrack: (v: boolean) => void
+  onChaseVolume: (v: boolean) => void
   onReturnGlobe: () => void
   onTogglePanel: () => void
   onDemoLightning: () => void
@@ -51,6 +55,8 @@ export function ExplorationControls({
   lightningConfigured,
   lightningCount,
   volumePinned,
+  followTrack,
+  chaseVolume,
   onLightingMode,
   onLayers,
   onPreset,
@@ -60,6 +66,8 @@ export function ExplorationControls({
   onEnterStorm,
   onPinSelectedCell,
   onEnterSelectedCell,
+  onFollowTrack,
+  onChaseVolume,
   onReturnGlobe,
   onTogglePanel,
   onDemoLightning,
@@ -139,6 +147,28 @@ export function ExplorationControls({
             onClick={() => onLayers({ volume: !layers.volume })}
           >
             Volume
+          </button>
+          <button
+            type="button"
+            className={followTrack ? 'active' : ''}
+            disabled={!volumePinned}
+            title={
+              volumePinned
+                ? 'Move the pinned volume along the derived track as observation time scrubs'
+                : 'Pin a cell volume first'
+            }
+            onClick={() => onFollowTrack(!followTrack)}
+          >
+            Follow track
+          </button>
+          <button
+            type="button"
+            className={chaseVolume ? 'active' : ''}
+            disabled={!volumePinned || !followTrack}
+            title="Gently re-frame the camera on the moving volume"
+            onClick={() => onChaseVolume(!chaseVolume)}
+          >
+            Chase
           </button>
           <button
             type="button"

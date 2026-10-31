@@ -41,12 +41,14 @@ Heuristic cell tracks from mosaics, CAPE/CIN, schematic cross-section with prove
 ### 4 — Cell reconstruction bridge + lightning feed
 Selected derived track + CAPE → procedural cloud parameters; pluggable GeoJSON lightning.
 
-### 5 — Georegistered storm volume (current)
-- **Pin volume** places a procedural ray-marched cloud volume at the cell’s lat/lon on Cesium
-- Schematic core / anvil / precip cues + provenance label on the globe
-- **Volume** layer toggle; click volume to enter immersive Three.js scene
-- Same drivers as M4 (derived cell + Open-Meteo CAPE) — still labelled **procedural**, not a measured radar volume
-- Prototype volume remains pinned at the synthetic NSW focus when no cell is pinned
+### 5 — Georegistered storm volume
+Pin procedural ray-marched volumes at cell lat/lon on Cesium with schematic cues.
+
+### 6 — Track-following volume animation (current)
+- **Follow track** walks the pinned georegistered volume along the derived cell path as observation time plays/scrubs
+- Track pose interpolated between cell points (heuristic geometry — not a forecast)
+- **Chase** optionally re-frames the camera on the moving volume
+- Label shows along-track progress; provenance stays **procedural**
 
 ## Scientific integrity
 
@@ -56,7 +58,7 @@ Selected derived track + CAPE → procedural cloud parameters; pluggable GeoJSON
 | Cell tracks | Derived heuristic (low confidence) |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
-| Globe volume after “Pin volume” | **Procedural**, georegistered by lat/lon |
+| Globe volume / track animation | **Procedural**, georegistered by interpolated track pose |
 | Immersive 3D storm | **Procedural** local scene (same drivers) |
 | Globe lightning | Direct only if you supply a licensed GeoJSON feed |
 | Prototype storm / demo bolts | Synthetic |
@@ -64,16 +66,16 @@ Selected derived track + CAPE → procedural cloud parameters; pluggable GeoJSON
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
-- Georegistered volume is visualisation, not a scientific retrieval or BoM RHI product
+- Track animation interpolates derived cell centroids — not a radar volume product
 - Tracks empty when Australia mosaics lack precip
-- Immersive scene remains a local Three.js environment (complements the globe volume)
+- Immersive scene remains a local Three.js environment
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
 3. Skill scores for cell tracking
-4. Time-animated volume following the track path
+4. Multi-cell volume comparison on the globe
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

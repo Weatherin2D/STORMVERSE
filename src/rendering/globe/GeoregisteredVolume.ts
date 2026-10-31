@@ -5,6 +5,8 @@ import {
   Cartesian2,
   Cartesian3,
   Color,
+  ConstantPositionProperty,
+  ConstantProperty,
   GeometryInstance,
   LabelStyle,
   Matrix4,
@@ -193,6 +195,22 @@ export interface GeoregisteredVolumeHandle {
   destroy: () => void
 }
 
+function paramsKeyOf(target: ReconstructionTarget, dims: { width: number; height: number; depth: number }): string {
+  return [
+    dims.width.toFixed(0),
+    dims.height.toFixed(0),
+    target.cloudParams.density.toFixed(2),
+    target.cloudParams.anvilExtent.toFixed(2),
+    target.cloudParams.verticalDevelopment.toFixed(2),
+    target.label,
+  ].join('|')
+}
+
+function poseKeyOf(lon: number, lat: number): string {
+  // ~110 m precision — enough for timeline animation without thrashing
+  return `${lon.toFixed(3)}|${lat.toFixed(3)}`
+}
+
 /**
  * Places a procedural storm volume at geographic coordinates on the Cesium globe.
  * Labelled procedural — not a measured radar volume product.
@@ -200,7 +218,13 @@ export interface GeoregisteredVolumeHandle {
 export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHandle {
   let primitive: Primitive | null = null
   let visible = true
-  let currentKey = ''
+  let lastParamsKey = ''
+  let lastPoseKey = ''
+  let lastProgress: number | undefined
+  let rebuildTimer: ReturnType<typeof setTimeout> | null = null
+  let pendingTarget: ReconstructionTarget | null = null
+
+  const baseHeight = 900
 
   const clearPrimitive = () => {
     if (primitive && !primitive.isDestroyed()) {
@@ -225,41 +249,56 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
     viewer.scene.requestRender()
   }
 
-  const setTarget = (target: ReconstructionTarget | null) => {
-    if (!target) {
-      clearPrimitive()
-      clearEntities()
-      currentKey = ''
-      viewer.scene.requestRender()
-      return
+  const updateEntityPose = (
+    lon: number,
+    lat: number,
+    dims: { width: number; height: number; depth: number },
+    anvilExtent: number,
+    label: string,
+    progress?: number,
+  ) => {
+    const coreHeight = Math.max(10_000, dims.height * 0.95)
+    const core = viewer.entities.getById(CORE_ID)
+    if (core) {
+      core.position = new ConstantPositionProperty(
+        Cartesian3.fromDegrees(lon, lat, baseHeight + coreHeight * 0.5),
+      )
     }
-
-    const dims = boxExtents(target.cloudParams)
-    const key = [
-      target.longitude.toFixed(4),
-      target.latitude.toFixed(4),
-      dims.width.toFixed(0),
-      dims.height.toFixed(0),
-      target.cloudParams.density.toFixed(2),
-      target.cloudParams.anvilExtent.toFixed(2),
-      target.cloudParams.verticalDevelopment.toFixed(2),
-      target.label,
-    ].join('|')
-
-    if (key === currentKey && primitive) {
-      setVisible(visible)
-      return
+    const anvil = viewer.entities.getById(ANVIL_ID)
+    if (anvil) {
+      anvil.position = new ConstantPositionProperty(
+        Cartesian3.fromDegrees(
+          lon + 0.06 * anvilExtent,
+          lat,
+          baseHeight + coreHeight + 1_500,
+        ),
+      )
     }
-    currentKey = key
+    const precip = viewer.entities.getById(PRECIP_ID)
+    if (precip) {
+      precip.position = new ConstantPositionProperty(
+        Cartesian3.fromDegrees(lon, lat, baseHeight + 3_500),
+      )
+    }
+    const labelEnt = viewer.entities.getById(LABEL_ID)
+    if (labelEnt) {
+      labelEnt.position = new ConstantPositionProperty(
+        Cartesian3.fromDegrees(lon, lat, baseHeight + dims.height + 2_500),
+      )
+      if (labelEnt.label) {
+        const prog =
+          progress != null ? `\ntrack ${Math.round(progress * 100)}% · animated` : ''
+        labelEnt.label.text = new ConstantProperty(
+          `${label}\nprocedural · georegistered${prog}`,
+        )
+      }
+    }
+  }
 
+  const buildPrimitive = (target: ReconstructionTarget, dims: ReturnType<typeof boxExtents>) => {
     clearPrimitive()
-    clearEntities()
-
-    const baseHeight = 900
     const origin = Cartesian3.fromDegrees(target.longitude, target.latitude, baseHeight)
     const enu = Transforms.eastNorthUpToFixedFrame(origin)
-    // ENU: +X east, +Y north, +Z up. BoxGeometry is axis-aligned in model space.
-    // Map box (x,y,z) → ENU (x,z,y) so box +Y (height) becomes ENU +Z (up), then lift centre.
     const swapYZ = new Matrix4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1)
     const lift = Matrix4.fromTranslation(new Cartesian3(0, 0, dims.height * 0.5), new Matrix4())
     const local = Matrix4.multiply(lift, swapYZ, new Matrix4())
@@ -278,8 +317,7 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
         depthTest: { enabled: true },
         depthMask: false,
         blending: BlendingState.ALPHA_BLEND,
-        // Cull front faces so fragments sit on the far side of the box (classic volume entry).
-        cull: { enabled: true, face: 1028 }, // FRONT
+        cull: { enabled: true, face: 1028 },
       },
       vertexShaderSource: volumeVertexShader(),
       fragmentShaderSource: volumeFragmentShader(target.cloudParams, dims, inverseModel),
@@ -299,8 +337,24 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
         show: visible,
       }),
     )
+  }
 
-    // Schematic tower + anvil — exaggerated slightly so vertical structure reads from orbit
+  const ensureEntities = (
+    target: ReconstructionTarget,
+    dims: ReturnType<typeof boxExtents>,
+  ) => {
+    if (viewer.entities.getById(CORE_ID)) {
+      updateEntityPose(
+        target.longitude,
+        target.latitude,
+        dims,
+        target.cloudParams.anvilExtent,
+        target.label,
+        target.drivers.alongTrackProgress,
+      )
+      return
+    }
+
     const coreRadius = 7_500 + target.cloudParams.density * 4_500
     const coreHeight = Math.max(10_000, dims.height * 0.95)
     viewer.entities.add({
@@ -338,11 +392,7 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
 
     viewer.entities.add({
       id: PRECIP_ID,
-      position: Cartesian3.fromDegrees(
-        target.longitude,
-        target.latitude,
-        baseHeight + 3_500,
-      ),
+      position: Cartesian3.fromDegrees(target.longitude, target.latitude, baseHeight + 3_500),
       cylinder: {
         length: 7_000,
         topRadius: 2_200,
@@ -352,6 +402,10 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
       show: visible,
     })
 
+    const prog =
+      target.drivers.alongTrackProgress != null
+        ? `\ntrack ${Math.round(target.drivers.alongTrackProgress * 100)}% · animated`
+        : ''
     viewer.entities.add({
       id: LABEL_ID,
       position: Cartesian3.fromDegrees(
@@ -360,7 +414,7 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
         baseHeight + dims.height + 2_500,
       ),
       label: {
-        text: `${target.label}\nprocedural · georegistered`,
+        text: `${target.label}\nprocedural · georegistered${prog}`,
         font: '12px "IBM Plex Sans", system-ui, sans-serif',
         fillColor: Color.WHITE,
         outlineColor: Color.BLACK,
@@ -375,7 +429,80 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
       },
       show: visible,
     })
+  }
 
+  const flushRebuild = () => {
+    rebuildTimer = null
+    const target = pendingTarget
+    if (!target) return
+    const dims = boxExtents(target.cloudParams)
+    buildPrimitive(target, dims)
+    lastPoseKey = poseKeyOf(target.longitude, target.latitude)
+    lastParamsKey = paramsKeyOf(target, dims)
+    lastProgress = target.drivers.alongTrackProgress
+    viewer.scene.requestRender()
+  }
+
+  const setTarget = (target: ReconstructionTarget | null) => {
+    if (!target) {
+      if (rebuildTimer) clearTimeout(rebuildTimer)
+      rebuildTimer = null
+      pendingTarget = null
+      clearPrimitive()
+      clearEntities()
+      lastParamsKey = ''
+      lastPoseKey = ''
+      viewer.scene.requestRender()
+      return
+    }
+
+    const dims = boxExtents(target.cloudParams)
+    const nextParams = paramsKeyOf(target, dims)
+    const nextPose = poseKeyOf(target.longitude, target.latitude)
+
+    if (nextParams === lastParamsKey && nextPose === lastPoseKey && primitive) {
+      if (target.drivers.alongTrackProgress !== lastProgress) {
+        lastProgress = target.drivers.alongTrackProgress
+        updateEntityPose(
+          target.longitude,
+          target.latitude,
+          dims,
+          target.cloudParams.anvilExtent,
+          target.label,
+          target.drivers.alongTrackProgress,
+        )
+        viewer.scene.requestRender()
+      }
+      setVisible(visible)
+      return
+    }
+
+    // Schematic entities move immediately for smooth track following
+    ensureEntities(target, dims)
+    updateEntityPose(
+      target.longitude,
+      target.latitude,
+      dims,
+      target.cloudParams.anvilExtent,
+      target.label,
+      target.drivers.alongTrackProgress,
+    )
+
+    const paramsChanged = nextParams !== lastParamsKey
+    pendingTarget = target
+
+    if (paramsChanged || !primitive) {
+      if (rebuildTimer) clearTimeout(rebuildTimer)
+      flushRebuild()
+      return
+    }
+
+    // Pose-only: throttle raymarch rebuild so timeline play stays responsive
+    lastPoseKey = nextPose
+    lastProgress = target.drivers.alongTrackProgress
+    if (!rebuildTimer) {
+      rebuildTimer = setTimeout(flushRebuild, 180)
+    }
     viewer.scene.requestRender()
   }
 
@@ -383,6 +510,7 @@ export function createGeoregisteredVolume(viewer: Viewer): GeoregisteredVolumeHa
     setTarget,
     setVisible,
     destroy: () => {
+      if (rebuildTimer) clearTimeout(rebuildTimer)
       clearPrimitive()
       clearEntities()
     },

@@ -22,9 +22,11 @@ interface InfoPanelProps {
   error: string | null
   onClose: () => void
   volumePinned: boolean
+  followTrack: boolean
   onEnterStorm: () => void
   onPinSelectedCell: () => void
   onEnterSelectedCell: () => void
+  onFollowTrack: (v: boolean) => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
 }
@@ -44,10 +46,12 @@ export function InfoPanel({
   loading,
   error,
   volumePinned,
+  followTrack,
   onClose,
   onEnterStorm,
   onPinSelectedCell,
   onEnterSelectedCell,
+  onFollowTrack,
   onReturnGlobe,
   onSelectTrack,
 }: InfoPanelProps) {
@@ -74,8 +78,9 @@ export function InfoPanel({
         <div className="panel-body">
           <p>
             Select a derived cell, then <strong>Pin volume</strong> to place a georegistered
-            procedural storm at that lat/lon on the globe. Use <strong>Enter immersive</strong> for
-            the local Three.js close-up. Lightning appears only when a GeoJSON feed is configured.
+            procedural storm on the globe. With <strong>Follow track</strong> on, the volume walks
+            the track as you scrub observation time. <strong>Enter immersive</strong> opens the
+            local Three.js close-up.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
@@ -148,6 +153,18 @@ export function InfoPanel({
                   <dd>{volumePinned ? 'On globe' : 'Not yet'}</dd>
                 </div>
                 <div>
+                  <dt>Follow track</dt>
+                  <dd>{followTrack && volumePinned ? 'Animating with timeline' : 'Static pin'}</dd>
+                </div>
+                <div>
+                  <dt>Along track</dt>
+                  <dd>
+                    {reconstruction.drivers.alongTrackProgress != null
+                      ? `${Math.round(reconstruction.drivers.alongTrackProgress * 100)}%`
+                      : '—'}
+                  </dd>
+                </div>
+                <div>
                   <dt>CAPE driver</dt>
                   <dd>
                     {reconstruction.drivers.capeJkg != null
@@ -167,10 +184,6 @@ export function InfoPanel({
                   <dt>Density</dt>
                   <dd>{reconstruction.cloudParams.density.toFixed(2)}</dd>
                 </div>
-                <div>
-                  <dt>Anvil</dt>
-                  <dd>{reconstruction.cloudParams.anvilExtent.toFixed(2)}</dd>
-                </div>
               </dl>
               <p className="provenance">
                 <strong>Provenance:</strong> {reconstruction.provenance.summary}
@@ -178,6 +191,14 @@ export function InfoPanel({
               <div className="control-cluster wrap">
                 <button type="button" className="primary" onClick={onPinSelectedCell}>
                   {volumePinned ? 'Update volume on globe' : 'Pin volume on globe'}
+                </button>
+                <button
+                  type="button"
+                  className={followTrack ? 'active' : ''}
+                  disabled={!volumePinned}
+                  onClick={() => onFollowTrack(!followTrack)}
+                >
+                  Follow track
                 </button>
                 <button type="button" onClick={onEnterSelectedCell}>
                   Enter immersive

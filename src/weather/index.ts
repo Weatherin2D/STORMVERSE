@@ -14,6 +14,12 @@ export {
   type ReconstructionTarget,
 } from './reconstruction/mapToCloudParams'
 export {
+  interpolateTrackAtCursor,
+  interpolateTrackAtUnix,
+  radarCursorToUnix,
+  type TrackPose,
+} from './reconstruction/interpolateTrack'
+export {
   GeoJsonLightningProvider,
   createLightningProviderFromEnv,
 } from './adapters/GeoJsonLightningAdapter'
