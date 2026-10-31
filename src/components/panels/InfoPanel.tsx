@@ -1,10 +1,16 @@
 import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
-import type { StormTrack, WeatherObservationMeta } from '../../weather'
+import type {
+  ReconstructionTarget,
+  StormTrack,
+  TrackSkillScore,
+  TrackSkillSummary,
+  WeatherObservationMeta,
+} from '../../weather'
 import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapter'
-import type { ReconstructionTarget } from '../../weather'
 import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
+import { TrackSkillCard } from '../scientific/TrackSkillCard'
 
 interface InfoPanelProps {
   open: boolean
@@ -15,6 +21,8 @@ interface InfoPanelProps {
   selectedTrackId: string | null
   reconstruction: ReconstructionTarget | null
   compareVolumes: ReconstructionTarget[]
+  trackSkills: TrackSkillScore[]
+  trackSkillSummary: TrackSkillSummary | null
   radarLabel: string | null
   tracksLoading: boolean
   lightningConfigured: boolean
@@ -44,6 +52,8 @@ export function InfoPanel({
   selectedTrackId,
   reconstruction,
   compareVolumes,
+  trackSkills,
+  trackSkillSummary,
   radarLabel,
   tracksLoading,
   lightningConfigured,
@@ -65,6 +75,8 @@ export function InfoPanel({
 }: InfoPanelProps) {
   if (!open) return null
   const selected = tracks.find((t) => t.id === selectedTrackId) ?? null
+  const selectedSkill = trackSkills.find((s) => s.trackId === selectedTrackId) ?? null
+  const skillById = Object.fromEntries(trackSkills.map((s) => [s.trackId, s]))
 
   return (
     <aside className="info-panel" aria-label="Storm information">
@@ -131,6 +143,7 @@ export function InfoPanel({
                   const inCompare = compareVolumes.some((v) => v.drivers.trackId === t.id || v.id === t.id)
                   const accent = compareVolumes.find((v) => v.id === t.id || v.drivers.trackId === t.id)
                     ?.accentCss
+                  const skill = skillById[t.id]
                   return (
                     <li key={t.id}>
                       <button
@@ -143,6 +156,7 @@ export function InfoPanel({
                         {inCompare ? ' · compare' : ''}
                         <span>
                           {t.points.length} pts · conf {Math.round((t.confidence ?? 0) * 100)}%
+                          {skill ? ` · ${skill.grade} ${Math.round(skill.composite * 100)}%` : ''}
                         </span>
                       </button>
                     </li>
@@ -174,45 +188,54 @@ export function InfoPanel({
                   <tr>
                     <th>Cell</th>
                     <th>Conf</th>
+                    <th>Skill</th>
                     <th>Track</th>
-                    <th>Density</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
-                  {compareVolumes.map((v) => (
-                    <tr key={v.id} className={v.primary ? 'primary-row' : ''}>
-                      <td>
-                        <span className="swatch" style={{ background: v.accentCss ?? '#e8c27a' }} />
-                        {v.label.replace(' reconstruction', '')}
-                        {v.primary ? ' ★' : ''}
-                      </td>
-                      <td>
-                        {v.drivers.cellConfidence != null
-                          ? `${Math.round(v.drivers.cellConfidence * 100)}%`
-                          : '—'}
-                      </td>
-                      <td>
-                        {v.drivers.alongTrackProgress != null
-                          ? `${Math.round(v.drivers.alongTrackProgress * 100)}%`
-                          : '—'}
-                      </td>
-                      <td>{v.cloudParams.density.toFixed(2)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="icon-btn"
-                          onClick={() => onRemoveCompare(v.drivers.trackId ?? v.id)}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {compareVolumes.map((v) => {
+                    const skill = skillById[v.drivers.trackId ?? v.id]
+                    return (
+                      <tr key={v.id} className={v.primary ? 'primary-row' : ''}>
+                        <td>
+                          <span className="swatch" style={{ background: v.accentCss ?? '#e8c27a' }} />
+                          {v.label.replace(' reconstruction', '')}
+                          {v.primary ? ' ★' : ''}
+                        </td>
+                        <td>
+                          {v.drivers.cellConfidence != null
+                            ? `${Math.round(v.drivers.cellConfidence * 100)}%`
+                            : '—'}
+                        </td>
+                        <td>
+                          {skill
+                            ? `${Math.round(skill.composite * 100)}% ${skill.grade}`
+                            : '—'}
+                        </td>
+                        <td>
+                          {v.drivers.alongTrackProgress != null
+                            ? `${Math.round(v.drivers.alongTrackProgress * 100)}%`
+                            : '—'}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            onClick={() => onRemoveCompare(v.drivers.trackId ?? v.id)}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+
+          <TrackSkillCard score={selectedSkill} summary={trackSkillSummary} />
 
           {reconstruction && selected && (
             <div className="availability">

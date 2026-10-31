@@ -31,6 +31,8 @@ interface GlobeViewProps {
   tracks: StormTrack[]
   tracksVisible: boolean
   selectedTrackId: string | null
+  /** Heuristic track-skill composites keyed by track id. */
+  trackSkillById: Record<string, number>
   lightningEvents: LightningObservation[]
   lightningVisible: boolean
   volumeTarget: ReconstructionTarget | null
@@ -51,6 +53,7 @@ export function GlobeView({
   tracks,
   tracksVisible,
   selectedTrackId,
+  trackSkillById,
   lightningEvents,
   lightningVisible,
   volumeTarget,
@@ -86,7 +89,7 @@ export function GlobeView({
         globe.setVolumeVisible(volumeVisible)
         if (radarFrame) globe.setRadarFrame(radarFrame)
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
-        globe.setTracks(tracks, selectedTrackId)
+        globe.setTracks(tracks, selectedTrackId, trackSkillById)
         globe.setLightningEvents(lightningEvents)
         if (volumeTargets.length > 0) globe.setVolumeTargets(volumeTargets)
         else if (volumeTarget) globe.setVolumeTarget(volumeTarget)
@@ -141,8 +144,8 @@ export function GlobeView({
   }, [satelliteVisible])
 
   useEffect(() => {
-    globeRef.current?.setTracks(tracks, selectedTrackId)
-  }, [tracks, selectedTrackId])
+    globeRef.current?.setTracks(tracks, selectedTrackId, trackSkillById)
+  }, [tracks, selectedTrackId, trackSkillById])
 
   useEffect(() => {
     globeRef.current?.setTracksVisible(tracksVisible)

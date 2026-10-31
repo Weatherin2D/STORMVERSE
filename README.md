@@ -47,11 +47,14 @@ Pin procedural ray-marched volumes at cell lat/lon on Cesium with schematic cues
 ### 6 — Track-following volume animation
 Follow track / Chase walk pinned volumes along derived paths with observation time.
 
-### 7 — Multi-cell volume compare (current)
-- **Compare cells** pins up to four derived cells as accent-coloured georegistered volumes
-- Selected cell is **primary** (ray-marched); others use matching schematic towers
-- Compare table in the info panel (confidence, along-track %, density)
-- Add/remove individual cells; Follow track animates the whole set
+### 7 — Multi-cell volume compare
+Up to four accent-coloured georegistered volumes with compare table metrics.
+
+### 8 — Tracking quality proxies (current)
+- Heuristic **skill-style scores** per derived track: coverage, continuity, speed steadiness, path smoothness
+- Composite grade (`weak` / `fair` / `solid`) in the info panel, track list, compare table, and globe labels
+- Catalogue mean + grade counts
+- Explicit provenance: **not** formal verification against BoM/truth cells — self-consistency of the derived heuristic only
 
 ## Scientific integrity
 
@@ -59,6 +62,7 @@ Follow track / Chase walk pinned volumes along derived paths with observation ti
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Cell tracks | Derived heuristic (low confidence) |
+| Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
 | Globe volume / compare set | **Procedural**, georegistered |
@@ -69,16 +73,16 @@ Follow track / Chase walk pinned volumes along derived paths with observation ti
 ## Known limitations
 
 - No bundled live lightning network (configure your own licensed URL)
+- Track “skill” scores have no ground-truth reference
 - Compare volumes are visualisation aids, not measured radar volumes
 - Tracks empty when Australia mosaics lack precip
-- Only the primary compare volume is fully ray-marched (performance)
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
-3. Skill scores for cell tracking
-4. Export compare snapshots / shareable scene state
+3. Export compare snapshots / shareable scene state
+4. Optional verification hooks when a licensed truth cell product is available
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

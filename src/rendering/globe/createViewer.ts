@@ -52,7 +52,11 @@ export interface StormverseGlobe {
   setRadarVisible: (visible: boolean) => void
   setSatelliteFrame: (frame: SatelliteObservation | null) => void
   setSatelliteVisible: (visible: boolean) => void
-  setTracks: (tracks: StormTrack[], selectedId?: string | null) => void
+  setTracks: (
+    tracks: StormTrack[],
+    selectedId?: string | null,
+    skillById?: Record<string, number>,
+  ) => void
   setTracksVisible: (visible: boolean) => void
   setLightningEvents: (events: LightningObservation[]) => void
   setLightningVisible: (visible: boolean) => void
@@ -286,7 +290,11 @@ export async function createStormverseGlobe(
     trackEntityIds.clear()
   }
 
-  const setTracks = (tracks: StormTrack[], selectedId: string | null = null) => {
+  const setTracks = (
+    tracks: StormTrack[],
+    selectedId: string | null = null,
+    skillById: Record<string, number> = {},
+  ) => {
     clearTracks()
     if (!tracksVisible) return
     for (const track of tracks) {
@@ -298,6 +306,9 @@ export async function createStormverseGlobe(
       const lineId = `track-line-${track.id}`
       const head = track.points[track.points.length - 1]
       const headId = `track-head-${track.id}`
+      const skill = skillById[track.id]
+      const skillNote =
+        skill != null ? ` · skill ${Math.round(skill * 100)}%` : ''
       viewer.entities.add({
         id: lineId,
         name: track.stormId,
@@ -322,7 +333,7 @@ export async function createStormverseGlobe(
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         label: {
-          text: `Derived cell · conf ${Math.round((track.confidence ?? 0) * 100)}%`,
+          text: `Derived cell · conf ${Math.round((track.confidence ?? 0) * 100)}%${skillNote}`,
           font: '11px "IBM Plex Sans", system-ui, sans-serif',
           fillColor: Color.WHITE,
           showBackground: true,

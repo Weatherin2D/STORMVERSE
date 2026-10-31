@@ -463,6 +463,11 @@ export default function App() {
     setState((s) => ({ ...s, layers: { ...s.layers, ...partial } }))
   }
 
+  const trackSkillById = useMemo(
+    () => Object.fromEntries(live.trackSkills.map((s) => [s.trackId, s.composite])),
+    [live.trackSkills],
+  )
+
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
@@ -472,11 +477,21 @@ export default function App() {
             ? 'Volume follows derived track · procedural'
             : pinnedVolumeMode === 'cell'
               ? 'Georegistered cell volume · procedural'
-              : 'Radar · tracks · georegistered volume'
+              : live.trackSkillSummary.trackCount > 0
+                ? `Radar · tracks · skill mean ${Math.round(live.trackSkillSummary.meanComposite * 100)}%`
+                : 'Radar · tracks · georegistered volume'
         : reconMode === 'cell'
           ? 'Cell-informed reconstruction · not measured volume'
           : 'Prototype storm · synthetic demonstration',
-    [state.viewMode, reconMode, pinnedVolumeMode, followTrack, compareTrackIds.length],
+    [
+      state.viewMode,
+      reconMode,
+      pinnedVolumeMode,
+      followTrack,
+      compareTrackIds.length,
+      live.trackSkillSummary.trackCount,
+      live.trackSkillSummary.meanComposite,
+    ],
   )
 
   const clockLabel = useMemo(() => {
@@ -551,6 +566,8 @@ export default function App() {
                 : globeVolumeTarget ?? previewReconstruction
             }
             compareVolumes={compareVolumes}
+            trackSkills={live.trackSkills}
+            trackSkillSummary={live.trackSkillSummary}
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
             }
@@ -622,6 +639,7 @@ export default function App() {
           tracks={live.tracks}
           tracksVisible={state.layers.tracks}
           selectedTrackId={selectedTrackId}
+          trackSkillById={trackSkillById}
           lightningEvents={live.lightningEvents}
           lightningVisible={state.layers.lightningObs}
           volumeTarget={globeVolumeTarget}

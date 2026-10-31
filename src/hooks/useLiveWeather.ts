@@ -5,10 +5,14 @@ import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
   fetchOpenMeteoEnvironment,
+  scoreTracks,
+  summarizeTrackSkills,
   type LightningObservation,
   type RadarObservation,
   type SatelliteObservation,
   type StormTrack,
+  type TrackSkillScore,
+  type TrackSkillSummary,
   type WeatherObservationMeta,
 } from '../weather'
 import type { EnvironmentalProfile } from '../weather/adapters/OpenMeteoAdapter'
@@ -23,6 +27,8 @@ export interface LiveWeatherState {
   satelliteFrames: SatelliteObservation[]
   environment: EnvironmentalProfile | null
   tracks: StormTrack[]
+  trackSkills: TrackSkillScore[]
+  trackSkillSummary: TrackSkillSummary
   lightningEvents: LightningObservation[]
   lightningConfigured: boolean
   refresh: () => void
@@ -158,6 +164,15 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     return () => window.clearInterval(id)
   }, [])
 
+  const trackSkills = useMemo(
+    () => scoreTracks(tracks, radarFrames),
+    [tracks, radarFrames],
+  )
+  const trackSkillSummary = useMemo(
+    () => summarizeTrackSkills(trackSkills),
+    [trackSkills],
+  )
+
   return {
     loading,
     tracksLoading,
@@ -167,6 +182,8 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     satelliteFrames,
     environment,
     tracks,
+    trackSkills,
+    trackSkillSummary,
     lightningEvents,
     lightningConfigured: lightningProvider.configured(),
     refresh: () => setTick((n) => n + 1),

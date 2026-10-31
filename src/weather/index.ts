@@ -20,6 +20,14 @@ export {
   type TrackPose,
 } from './reconstruction/interpolateTrack'
 export {
+  scoreTrack,
+  scoreTracks,
+  summarizeTrackSkills,
+  type TrackSkillGrade,
+  type TrackSkillScore,
+  type TrackSkillSummary,
+} from './reconstruction/trackSkill'
+export {
   GeoJsonLightningProvider,
   createLightningProviderFromEnv,
 } from './adapters/GeoJsonLightningAdapter'
