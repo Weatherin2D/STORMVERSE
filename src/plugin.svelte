@@ -86,29 +86,25 @@
         group when you zoom in. Label colour changes the place names. The background colour replaces Windy's land and sea fill.
     </small>
 
-    <h3>Weather icons</h3>
-    {#each ICONS as icon}
-        <div class="block">
-            <div class="row">
-                <span class="grow">{iconLabels[icon]}</span>
-                {#if s.icons[icon].dataUrl}
-                    <img class="thumb" src={s.icons[icon].dataUrl} alt="" />
-                    <button class="btn" on:click={() => clearIcon(icon)}>Remove</button>
-                {/if}
-                <label class="btn">
-                    {s.icons[icon].dataUrl ? 'Replace' : 'Choose image'}
-                    <input type="file" accept="image/*" hidden on:change={e => pickIcon(e, icon)} />
-                </label>
+    {#each iconGroups as group}
+        <h3>{group.title}</h3>
+        {#each group.icons as icon}
+            <div class="block">
+                <div class="row wrap">
+                    <span class="grow">{iconLabels[icon]}</span>
+                    {#if s.icons[icon].dataUrl}
+                        <img class="thumb" src={s.icons[icon].dataUrl} alt="" />
+                        <button class="btn" on:click={() => clearIcon(icon)}>Remove</button>
+                    {/if}
+                    <label class="btn">
+                        {s.icons[icon].dataUrl ? 'Replace' : 'Choose image'}
+                        <input type="file" accept="image/*" hidden on:change={e => pickIcon(e, icon)} />
+                    </label>
+                </div>
             </div>
-            <small class="path">
-                {s.icons[icon].textureUrl ? shortUrl(s.icons[icon].textureUrl) : 'No Windy texture picked yet'}
-            </small>
-        </div>
+        {/each}
+        <small class="note">{group.note}</small>
     {/each}
-    <small class="note">
-        Icon swaps apply to textures Windy loads after this plugin has opened. Open the plugin first, then switch on
-        the layer that shows the icons.
-    </small>
 
     <h3>Inspector</h3>
     <div class="row wrap">
@@ -159,34 +155,16 @@
             </div>
         {/each}
 
-        <h4>Images Windy loaded ({scanResult.images.length})</h4>
-        {#each scanResult.images as img}
-            <div class="row tight">
-                <span class="grow mono path">{shortUrl(img.url)}</span>
-                {#each ICONS as icon}
-                    <button
-                        class="chip"
-                        class:on={s.icons[icon].textureUrl === img.url}
-                        class:hint={img.hint === icon}
-                        on:click={() => assignTexture(icon, img.url)}
-                        title={iconLabels[icon]}
-                    >
-                        {iconShort[icon]}
-                    </button>
-                {/each}
-            </div>
-        {/each}
-        <small class="note">
-            Letters: C coasts, G regional, R rivers, S streams, L labels; Li lightning, Sn snow, Ha hail for images.
-        </small>
+        <small class="note">Letters: C coasts, G regional, R rivers, S streams, L labels.</small>
     {/if}
 </section>
 
 <script lang="ts">
     import { onMount } from 'svelte';
     import {
-        ICONS,
         KINDS,
+        PATTERN_ICONS,
+        RADAR_ICONS,
         commit,
         effectivePrefix,
         fileToIcon,
@@ -213,8 +191,25 @@
         labels: 'Labels',
     };
     const kindShort: Record<Kind, string> = { major: 'C', regional: 'G', rivers: 'R', streams: 'S', labels: 'L' };
-    const iconLabels: Record<IconKind, string> = { lightning: 'Lightning', snow: 'Snow', hail: 'Hail' };
-    const iconShort: Record<IconKind, string> = { lightning: 'Li', snow: 'Sn', hail: 'Ha' };
+    const iconLabels: Record<IconKind, string> = {
+        lightning: 'Lightning',
+        snow: 'Snow',
+        hail: 'Hail',
+        rain: 'Rain',
+        thunder: 'Thunder',
+    };
+    const iconGroups: { title: string; icons: IconKind[]; note: string }[] = [
+        {
+            title: 'Radar and satellite',
+            icons: RADAR_ICONS,
+            note: 'Radar and satellite share these symbols. Lightning is the bolt, snow is the flake, and hail is the round mark. The picture is the shape, and Windy still colours it. A picture with a transparent background works best. Switch that layer off and on after choosing an image.',
+        },
+        {
+            title: 'Rain, thunder',
+            icons: PATTERN_ICONS,
+            note: 'These are the repeating marks on the Rain, thunder layer. Rain changes the precipitation symbols and thunder changes the lightning symbols. Windy still tints them. Switch that layer off and on after choosing an image.',
+        },
+    ];
 
     const shortUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/^www\./, '');
     const thicknessText = (value: number | string | null | undefined) => {
@@ -231,16 +226,18 @@
         layerInfo = layerInfo;
     }
 
-    function changed(kind?: Kind) {
+    function changed(kind?: Kind, note?: string) {
         if (kind) {
             s.kinds[kind].touched = true;
             // ensure thickness has a value (handles old saved settings without thickness)
             if (s.kinds[kind].thickness == null) s.kinds[kind].thickness = 1;
         }
         s = s;
-        status = commit() ? 'Saved' : 'Could not save: browser storage is full or blocked';
+        status = commit() ? (note ?? 'Saved') : 'Could not save: browser storage is full or blocked';
         refreshInfo();
     }
+
+    const iconSaved = 'Saved. Switch that layer off and on to show the new symbol.';
 
     async function pickIcon(e: Event, icon: IconKind) {
         const input = e.target as HTMLInputElement;
@@ -248,7 +245,7 @@
         if (!file) return;
         try {
             s.icons[icon].dataUrl = await fileToIcon(file);
-            changed();
+            changed(undefined, iconSaved);
         } catch {
             status = 'That file could not be read as an image';
         }
@@ -257,12 +254,7 @@
 
     function clearIcon(icon: IconKind) {
         s.icons[icon].dataUrl = null;
-        changed();
-    }
-
-    function assignTexture(icon: IconKind, url: string) {
-        s.icons[icon].textureUrl = s.icons[icon].textureUrl === url ? '' : url;
-        changed();
+        changed(undefined, iconSaved);
     }
 
     function setPrefix(kind: Kind, prefix: string) {
@@ -283,7 +275,7 @@
     function doScan() {
         scanResult = scan();
         refreshInfo();
-        status = `Found ${scanResult.layers.length} layers and ${scanResult.images.length} images`;
+        status = `Found ${scanResult.layers.length} layers and ${scanResult.tilePrefixes.length} image sources`;
     }
 
     async function copyDiag() {
@@ -427,9 +419,6 @@
         background: #2d8cff;
         border-color: #2d8cff;
         color: #fff;
-    }
-    .chip.hint:not(.on) {
-        border-color: #2d8cff;
     }
     textarea {
         width: 100%;

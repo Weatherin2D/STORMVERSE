@@ -10,6 +10,8 @@ Windy draws those in three different places, and an earlier version of this plug
 
 Picking a colour now updates the part of the map that colour belongs to. Settings are saved in the browser.
 
+Radar and satellite share their symbols: the lightning bolt, the snowflake, and the hail mark. Rain, thunder is a separate layer, with its own repeating rain marks and thunder marks. Choose a picture for any of those, then switch that layer off and on. The picture is used as the shape, and Windy still colours it.
+
 ## Run it
 
 ```bash
@@ -27,4 +29,4 @@ The dev server uses a self-signed certificate for `localhost`. The first time yo
 
 Windy loads that file from `https://www.windy.com`, so the server also allows local-network access. If Chrome asks whether Windy can connect to devices on your local network, choose **Allow**. The address in developer mode must be exactly `https://localhost:9999/plugin.js`.
 
-`npm test` checks the recolour rules. `npm run build` writes `dist/plugin.js`.
+`npm test` checks the recolour rules and the weather-symbol packing. `npm run build` writes `dist/plugin.js`.

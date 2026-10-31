@@ -1,5 +1,5 @@
 export type Kind = 'major' | 'regional' | 'rivers' | 'streams' | 'labels';
-export type IconKind = 'lightning' | 'snow' | 'hail';
+export type IconKind = 'lightning' | 'snow' | 'hail' | 'rain' | 'thunder';
 export type InkTarget = 'all' | 'dark' | 'light';
 
 export interface KindStyle {
@@ -21,8 +21,6 @@ export interface KindStyle {
 export interface IconStyle {
     /** The user's replacement image, downscaled, as a data URL. */
     dataUrl: string | null;
-    /** The Windy texture URL this replaces (picked from the scan list). */
-    textureUrl: string;
 }
 
 export interface Settings {
@@ -56,9 +54,11 @@ export const defaults = (): Settings => ({
         labels: kind('#ffffff', 'dark'),
     },
     icons: {
-        lightning: { dataUrl: null, textureUrl: '' },
-        snow: { dataUrl: null, textureUrl: '' },
-        hail: { dataUrl: null, textureUrl: '' },
+        lightning: { dataUrl: null },
+        snow: { dataUrl: null },
+        hail: { dataUrl: null },
+        rain: { dataUrl: null },
+        thunder: { dataUrl: null },
     },
 });
 

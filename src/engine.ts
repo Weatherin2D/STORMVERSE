@@ -9,6 +9,17 @@ import {
     safeHex,
 } from './recolor';
 import type { RecolorRule } from './recolor';
+import {
+    applyRadarPattern,
+    buildIconSheet,
+    buildLightningAtlas,
+    maskFromPixels,
+    RADAR_PATTERN_TOKEN,
+    RAIN_TEXTURE,
+    SHEET_SIZE,
+    THUNDER_TEXTURE,
+} from './icons';
+import type { IconMask } from './icons';
 import { defaults, loadSettings, saveSettings } from './settings';
 import type { IconKind, Kind, Settings } from './settings';
 
@@ -19,14 +30,17 @@ const win = window as any;
 
 export const LINE_KINDS: Kind[] = ['major', 'regional', 'rivers', 'streams'];
 export const KINDS: Kind[] = [...LINE_KINDS, 'labels'];
-export const ICONS: IconKind[] = ['lightning', 'snow', 'hail'];
+export const RADAR_ICONS: IconKind[] = ['lightning', 'snow', 'hail'];
+export const PATTERN_ICONS: IconKind[] = ['rain', 'thunder'];
+export const ICONS: IconKind[] = [...RADAR_ICONS, ...PATTERN_ICONS];
 
 /** Mutable, shared with the UI. Call commit() after changing it. */
 export const settings: Settings = loadSettings();
 
 const STYLE_ELEMENT_ID = 'windy-plugin-map-style';
-const FETCH_VERSION = 6;
-const IMAGE_PATCH_VERSION = 6;
+const FETCH_VERSION = 7;
+const IMAGE_PATCH_VERSION = 7;
+const CANVAS_PATCH_VERSION = 7;
 
 /* ------------------------------------------------------------------ */
 /* Map access                                                          */
@@ -153,11 +167,6 @@ export async function fileToIcon(file: File, max = 256): Promise<string> {
     return canvas.toDataURL('image/png');
 }
 
-interface IconRule {
-    url: string;
-    dataUrl: string;
-}
-
 async function recolorBlob(blob: Blob, rules: RecolorRule[]): Promise<Blob> {
     const bitmap = await createImageBitmap(blob);
     const width = bitmap.width;
@@ -174,35 +183,139 @@ async function recolorBlob(blob: Blob, rules: RecolorRule[]): Promise<Blob> {
     return canvas.convertToBlob({ type: 'image/png' });
 }
 
-const iconCache = new Map<string, Promise<Blob>>();
+interface PreparedIcons {
+    lightning: Uint8ClampedArray | null;
+    snow: IconMask | null;
+    hail: IconMask | null;
+    rainDataUrl: string | null;
+    thunderDataUrl: string | null;
+    rainBlob: Blob | null;
+    thunderBlob: Blob | null;
+}
 
-function buildIconBlob(origFetch: typeof fetch, url: string, dataUrl: string): Promise<Blob> {
-    const key = `${url}|${dataUrl.length}|${dataUrl.slice(-48)}`;
-    let pending = iconCache.get(key);
-    if (!pending) {
-        pending = (async () => {
-            const user = await createImageBitmap(dataUrlToBlob(dataUrl));
-            let width = user.width;
-            let height = user.height;
+let prepareToken = 0;
+let iconSignature = '';
+let prepareCurrent: Promise<void> = Promise.resolve();
+const imageJobs = new WeakMap<object, number>();
+
+function iconKey(): string {
+    return ICONS.map(icon => {
+        const dataUrl = settings.icons[icon].dataUrl;
+        return dataUrl ? `${dataUrl.length}:${dataUrl.slice(-48)}` : '';
+    }).join('|');
+}
+
+async function decodeMask(dataUrl: string): Promise<IconMask> {
+    const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
+    const width = bitmap.width;
+    const height = bitmap.height;
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('no 2d context');
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    const image = context.getImageData(0, 0, width, height);
+    return maskFromPixels(image.data, width, height);
+}
+
+async function pixelsToPng(pixels: Uint8ClampedArray, width: number, height: number): Promise<{ blob: Blob; dataUrl: string }> {
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('no 2d context');
+    context.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return { blob, dataUrl: await blobToDataUrl(blob) };
+}
+
+async function buildPrepared(token: number) {
+    const prepared: PreparedIcons = {
+        lightning: null,
+        snow: null,
+        hail: null,
+        rainDataUrl: null,
+        thunderDataUrl: null,
+        rainBlob: null,
+        thunderBlob: null,
+    };
+    try {
+        const masks = new Map<IconKind, IconMask>();
+        for (const icon of ICONS) {
+            const dataUrl = settings.icons[icon].dataUrl;
+            if (!dataUrl) continue;
             try {
-                const res = await origFetch(url);
-                if (res.ok) {
-                    const original = await createImageBitmap(await res.blob());
-                    width = original.width;
-                    height = original.height;
-                    original.close?.();
-                }
+                masks.set(icon, await decodeMask(dataUrl));
             } catch {
-                /* keep the user's image size */
+                /* this picture could not be read; the others still apply */
             }
-            const canvas = new OffscreenCanvas(width, height);
-            canvas.getContext('2d')!.drawImage(user, 0, 0, width, height);
-            user.close?.();
-            return canvas.convertToBlob({ type: 'image/png' });
-        })();
-        iconCache.set(key, pending);
+        }
+        if (token !== prepareToken) return;
+        const lightning = masks.get('lightning');
+        if (lightning) prepared.lightning = buildLightningAtlas(lightning);
+        prepared.snow = masks.get('snow') ?? null;
+        prepared.hail = masks.get('hail') ?? null;
+        const rain = masks.get('rain');
+        if (rain) {
+            const png = await pixelsToPng(buildIconSheet(rain), SHEET_SIZE, SHEET_SIZE);
+            if (token !== prepareToken) return;
+            prepared.rainBlob = png.blob;
+            prepared.rainDataUrl = png.dataUrl;
+        }
+        const thunder = masks.get('thunder');
+        if (thunder) {
+            const png = await pixelsToPng(buildIconSheet(thunder), SHEET_SIZE, SHEET_SIZE);
+            if (token !== prepareToken) return;
+            prepared.thunderBlob = png.blob;
+            prepared.thunderDataUrl = png.dataUrl;
+        }
+        if (token !== prepareToken) return;
+        win.__wmsIcons = prepared;
+    } catch {
+        if (token === prepareToken) iconSignature = '';
     }
-    return pending;
+}
+
+/** Decode chosen pictures once. The interceptors below read the result synchronously. */
+function schedulePrepare() {
+    const next = iconKey();
+    if (next === iconSignature) return;
+    iconSignature = next;
+    const token = ++prepareToken;
+    const run = () => buildPrepared(token);
+    prepareCurrent = prepareCurrent.then(run, run);
+    win.__wmsPrepare = prepareCurrent;
+}
+
+function prepareReady(): Promise<void> {
+    return win.__wmsPrepare ?? Promise.resolve();
+}
+
+function nextImageJob(element: object): number {
+    const job = (imageJobs.get(element) ?? 0) + 1;
+    imageJobs.set(element, job);
+    return job;
+}
+
+function sheetKind(url: string): 'rain' | 'thunder' | null {
+    if (url.includes(RAIN_TEXTURE)) return 'rain';
+    if (url.includes(THUNDER_TEXTURE)) return 'thunder';
+    return null;
+}
+
+async function rebuildRadarPattern(dataUrl: string): Promise<string> {
+    const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
+    const width = bitmap.width;
+    const height = bitmap.height;
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('no 2d context');
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    const image = context.getImageData(0, 0, width, height);
+    const icons: PreparedIcons | undefined = win.__wmsIcons;
+    const next = applyRadarPattern(image.data, width, height, icons?.snow ?? null, icons?.hail ?? null);
+    context.putImageData(new ImageData(next, width, height), 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return blobToDataUrl(blob);
 }
 
 /* ------------------------------------------------------------------ */
@@ -211,10 +324,6 @@ function buildIconBlob(origFetch: typeof fetch, url: string, dataUrl: string): P
 
 function activeRules(): RecolorRule[] {
     return win.__wmsRules?.recolorRules ?? [];
-}
-
-function iconRules(): IconRule[] {
-    return win.__wmsRules?.iconRules ?? [];
 }
 
 function requestUrl(input: any): string {
@@ -236,6 +345,42 @@ async function recolorResponse(res: Response, rules: RecolorRule[]): Promise<Res
     }
 }
 
+function installCanvasPatch() {
+    const proto = win.CanvasRenderingContext2D?.prototype;
+    if (!proto?.getImageData || win.__wmsCanvasPatched === CANVAS_PATCH_VERSION) return;
+    if (!win.__wmsOrigGetImageData) win.__wmsOrigGetImageData = proto.getImageData;
+    win.__wmsCanvasPatched = CANVAS_PATCH_VERSION;
+    const orig = win.__wmsOrigGetImageData;
+    proto.getImageData = function (this: CanvasRenderingContext2D, ...args: any[]) {
+        const image = orig.apply(this, args);
+        try {
+            const atlas: Uint8ClampedArray | null | undefined = win.__wmsIcons?.lightning;
+            const [sx, sy, sw, sh] = args;
+            const canvas = this.canvas;
+            const pixel = image?.data;
+            // wa() fills the atlas canvas red before it draws the bolts, then reads 256×64 pixels.
+            if (
+                atlas &&
+                canvas?.width === 256 &&
+                canvas?.height === 64 &&
+                sx === 0 &&
+                sy === 0 &&
+                sw === 256 &&
+                sh === 64 &&
+                pixel &&
+                pixel[0] > 200 &&
+                pixel[1] < 40 &&
+                pixel[2] < 40
+            ) {
+                return new ImageData(new Uint8ClampedArray(atlas), 256, 64);
+            }
+        } catch {
+            /* keep the canvas pixels */
+        }
+        return image;
+    };
+}
+
 function installInterceptors() {
     if (!win.__wmsOrigFetch) win.__wmsOrigFetch = win.fetch.bind(win);
     if (win.__wmsFetchVersion !== FETCH_VERSION) {
@@ -246,11 +391,17 @@ function installInterceptors() {
                 const raw = requestUrl(input);
                 if (raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) {
                     const url = abs(raw);
-                    const bare = url.split('?')[0];
-                    const icon = iconRules().find(rule => rule.url === bare);
-                    if (icon) {
-                        const blob = await buildIconBlob(origFetch, url, icon.dataUrl);
-                        return new Response(blob, { status: 200, headers: { 'Content-Type': 'image/png' } });
+                    const sheet = sheetKind(url);
+                    if (sheet) {
+                        await prepareReady();
+                        const blob: Blob | null | undefined =
+                            sheet === 'rain' ? win.__wmsIcons?.rainBlob : win.__wmsIcons?.thunderBlob;
+                        if (blob) {
+                            return new Response(blob.slice(0, blob.size, 'image/png'), {
+                                status: 200,
+                                headers: { 'Content-Type': 'image/png' },
+                            });
+                        }
                     }
                     const rules = rulesForUrl(url, activeRules());
                     if (rules.length) {
@@ -270,41 +421,67 @@ function installInterceptors() {
     if (desc?.set && win.__wmsImgPatched !== IMAGE_PATCH_VERSION) {
         win.__wmsImgPatched = IMAGE_PATCH_VERSION;
         const origFetch: typeof fetch = win.__wmsOrigFetch;
+        const assign = (element: HTMLImageElement, value: string) => desc.set!.call(element, value);
         Object.defineProperty(proto, 'src', {
             configurable: true,
             enumerable: desc.enumerable,
             get: desc.get,
             set(this: HTMLImageElement, value: string) {
                 try {
+                    if (typeof value === 'string' && value.includes(RADAR_PATTERN_TOKEN)) {
+                        const element = this;
+                        const job = nextImageJob(element);
+                        prepareReady()
+                            .then(async () => {
+                                if (imageJobs.get(element) !== job) return;
+                                const icons: PreparedIcons | undefined = win.__wmsIcons;
+                                if (!icons?.snow && !icons?.hail) {
+                                    assign(element, value);
+                                    return;
+                                }
+                                const dataUrl = await rebuildRadarPattern(value);
+                                if (imageJobs.get(element) !== job) return;
+                                assign(element, dataUrl.includes(RADAR_PATTERN_TOKEN) ? value : dataUrl);
+                            })
+                            .catch(() => assign(element, value));
+                        return;
+                    }
                     if (typeof value === 'string' && value && !value.startsWith('data:') && !value.startsWith('blob:')) {
                         const url = abs(value);
-                        const bare = url.split('?')[0];
-                        const icon = iconRules().find(rule => rule.url === bare);
-                        if (icon) {
-                            buildIconBlob(origFetch, url, icon.dataUrl)
-                                .then(blobToDataUrl)
-                                .then(dataUrl => desc.set!.call(this, dataUrl))
-                                .catch(() => desc.set!.call(this, value));
+                        const sheet = sheetKind(url);
+                        if (sheet) {
+                            const element = this;
+                            const job = nextImageJob(element);
+                            prepareReady()
+                                .then(() => {
+                                    if (imageJobs.get(element) !== job) return;
+                                    const dataUrl =
+                                        sheet === 'rain' ? win.__wmsIcons?.rainDataUrl : win.__wmsIcons?.thunderDataUrl;
+                                    assign(element, dataUrl || value);
+                                })
+                                .catch(() => assign(element, value));
                             return;
                         }
                         const rules = rulesForUrl(url, activeRules());
                         if (rules.length) {
+                            const element = this;
                             origFetch(url)
                                 .then(res => (res.ok ? res.blob() : Promise.reject(new Error(String(res.status)))))
                                 .then(blob => recolorBlob(blob, rules))
                                 .then(blobToDataUrl)
-                                .then(dataUrl => desc.set!.call(this, dataUrl))
-                                .catch(() => desc.set!.call(this, value));
+                                .then(dataUrl => assign(element, dataUrl))
+                                .catch(() => assign(element, value));
                             return;
                         }
                     }
                 } catch {
                     /* use the original setter */
                 }
-                desc.set!.call(this, value);
+                assign(this, value);
             },
         });
     }
+    installCanvasPatch();
 }
 
 /**
@@ -435,13 +612,7 @@ function rebuildRules() {
             thickness: Number(chosen.thickness) || 1,
         });
     }
-    const icons: IconRule[] = ICONS.filter(icon => settings.icons[icon].dataUrl && settings.icons[icon].textureUrl).map(
-        icon => ({
-            url: abs(settings.icons[icon].textureUrl).split('?')[0],
-            dataUrl: settings.icons[icon].dataUrl as string,
-        }),
-    );
-    win.__wmsRules = { recolorRules, iconRules: icons };
+    win.__wmsRules = { recolorRules };
 }
 
 function backgroundShader(): any {
@@ -568,6 +739,7 @@ export function apply() {
     const previousSig = JSON.stringify(recolorRules);
     rebuildRules();
     installInterceptors();
+    schedulePrepare();
     applyBackground();
     applyLabels();
     applyLineVisibility();
