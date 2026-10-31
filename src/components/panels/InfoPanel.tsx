@@ -1,12 +1,16 @@
 import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
-import type { WeatherObservationMeta } from '../../weather'
+import type { EnvironmentalSample, WeatherObservationMeta } from '../../weather'
 import { australianWeatherProvider } from '../../weather'
 
 interface InfoPanelProps {
   open: boolean
   viewMode: ViewMode
   availability: WeatherObservationMeta[]
+  environment: EnvironmentalSample | null
+  radarLabel: string | null
+  loading: boolean
+  error: string | null
   onClose: () => void
   onEnterStorm: () => void
   onReturnGlobe: () => void
@@ -16,6 +20,10 @@ export function InfoPanel({
   open,
   viewMode,
   availability,
+  environment,
+  radarLabel,
+  loading,
+  error,
   onClose,
   onEnterStorm,
   onReturnGlobe,
@@ -37,12 +45,68 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Navigate the interactive Earth, then select the marked prototype storm over inland
-            New South Wales to enter the three-dimensional thunderstorm environment.
+            Live radar mosaics for the Australia region are overlaid from the public RainViewer
+            catalog. Select the prototype storm marker to enter the synthetic 3D reconstruction —
+            clouds there are not derived from the radar tiles.
           </p>
           <p className="provenance">
-            <strong>Provenance:</strong> globe imagery may come from Cesium Ion (if configured)
-            or OpenStreetMap tiles. The storm marker is a synthetic demonstration target.
+            <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
+          </p>
+          {error && <p className="provenance">{error}</p>}
+          <div className="availability">
+            <h3>Observation feeds</h3>
+            <ul>
+              {availability.map((item) => (
+                <li key={item.id}>
+                  <span>{item.productType.split('_').join(' ')}</span>
+                  <span className={item.available ? 'ok' : 'missing'}>
+                    {item.available ? item.provenance.kind : 'unavailable'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {environment && (
+            <div className="availability">
+              <h3>Environment at prototype site</h3>
+              {environment.available ? (
+                <dl className="meta-grid">
+                  <div>
+                    <dt>Temperature</dt>
+                    <dd>{environment.temperatureC?.toFixed(1) ?? '—'} °C</dd>
+                  </div>
+                  <div>
+                    <dt>Humidity</dt>
+                    <dd>{environment.relativeHumidityPct ?? '—'}%</dd>
+                  </div>
+                  <div>
+                    <dt>Wind</dt>
+                    <dd>
+                      {environment.windSpeedMps != null
+                        ? `${environment.windSpeedMps.toFixed(1)} m/s`
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Precip (model)</dt>
+                    <dd>
+                      {environment.precipitationMm != null
+                        ? `${environment.precipitationMm.toFixed(1)} mm`
+                        : '—'}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="provenance">Environmental model context unavailable.</p>
+              )}
+              <p className="provenance">
+                <strong>Provenance:</strong> {environment.provenance.summary}
+              </p>
+            </div>
+          )}
+          <p className="provenance">
+            <strong>Provider:</strong> {australianWeatherProvider.displayName}. Lightning and
+            automated storm tracks are not included in this feed.
           </p>
           <button type="button" className="primary" onClick={onEnterStorm}>
             Approach prototype storm
@@ -78,14 +142,10 @@ export function InfoPanel({
                 <li key={item.id}>
                   <span>{item.productType.split('_').join(' ')}</span>
                   <span className={item.available ? 'ok' : 'missing'}>
-                    {item.available ? 'demo' : 'unavailable'}
+                    {item.available ? item.provenance.kind : 'unavailable'}
                   </span>
                 </li>
               ))}
-              <li>
-                <span>{australianWeatherProvider.displayName}</span>
-                <span className="missing">stub</span>
-              </li>
             </ul>
           </div>
           <button type="button" onClick={onReturnGlobe}>

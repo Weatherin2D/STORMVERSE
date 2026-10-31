@@ -9,14 +9,22 @@ export interface LayerState {
   clouds: boolean
   lightning: boolean
   precipitation: boolean
+  /** Globe radar reflectivity mosaic. */
+  radar: boolean
+  /** Globe infrared satellite mosaic when available. */
+  satellite: boolean
 }
 
 export interface TimelineState {
   playing: boolean
-  /** Seconds into the prototype simulation window. */
-  simTime: number
+  /**
+   * Globe mode: index into radar/satellite frame list (fractional while playing).
+   * Storm mode: seconds into the prototype simulation window.
+   */
+  cursor: number
   speed: number
-  duration: number
+  /** Globe: frame count - 1; Storm: duration seconds. */
+  max: number
 }
 
 export interface AppState {
@@ -41,19 +49,21 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       clouds: true,
       lightning: true,
       precipitation: true,
+      radar: true,
+      satellite: false,
     },
     cloudParams: { ...CLOUD_DEFAULTS },
     flashFreq: 0.35,
     timeline: {
       playing: true,
-      simTime: 0,
+      cursor: 0,
       speed: TIMELINE.defaultSpeed,
-      duration: TIMELINE.durationSec,
+      max: TIMELINE.durationSec,
     },
     panelOpen: true,
     debugOpen: false,
     reducedFlash: reducedMotion,
     cameraPreset: 'overview',
-    statusMessage: 'Explore the globe, then open the prototype storm.',
+    statusMessage: 'Loading Australian radar observations…',
   }
 }

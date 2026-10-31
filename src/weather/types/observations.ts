@@ -34,6 +34,12 @@ export interface RadarObservation extends WeatherObservationMeta {
   /** Reflectivity grid placeholder — never fabricate live values. */
   elevationAngleDeg?: number
   verticalLevels?: number
+  /** XYZ tile template with {z}/{x}/{y} when the product is imagery-based. */
+  tileUrlTemplate?: string
+  /** Provider path or asset id for this frame. */
+  framePath?: string
+  /** Unix seconds for this radar frame when known. */
+  frameTimeUnix?: number
   grid?: {
     cols: number
     rows: number
@@ -47,6 +53,25 @@ export interface SatelliteObservation extends WeatherObservationMeta {
   productType: 'satellite_visible' | 'satellite_infrared'
   imageUrl?: string
   band?: string
+  tileUrlTemplate?: string
+  framePath?: string
+  frameTimeUnix?: number
+}
+
+/** Model / forecast environmental sample — not a direct observation. */
+export interface EnvironmentalSample {
+  id: string
+  sourceId: string
+  validAt: string
+  longitude: number
+  latitude: number
+  temperatureC?: number
+  relativeHumidityPct?: number
+  windSpeedMps?: number
+  precipitationMm?: number
+  weatherCode?: number
+  available: boolean
+  provenance: Provenance
 }
 
 export type LightningClassification =

@@ -5,6 +5,7 @@ import {
   Color,
   Credit,
   HeightReference,
+  ImageryLayer,
   Ion,
   IonImageryProvider,
   LabelStyle,
@@ -18,6 +19,7 @@ import {
   createWorldTerrainAsync,
 } from 'cesium'
 import { PROTOTYPE_STORM } from '../../config/app'
+import type { RadarObservation, SatelliteObservation } from '../../weather/types/observations'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 export interface GlobePick {
@@ -30,6 +32,10 @@ export interface StormverseGlobe {
   flyToStorm: (duration?: number) => void
   flyHome: (duration?: number) => void
   flyToCoords: (lon: number, lat: number, height: number, duration?: number) => void
+  setRadarFrame: (frame: RadarObservation | null) => void
+  setRadarVisible: (visible: boolean) => void
+  setSatelliteFrame: (frame: SatelliteObservation | null) => void
+  setSatelliteVisible: (visible: boolean) => void
   destroy: () => void
 }
 
@@ -47,7 +53,8 @@ export async function createStormverseGlobe(
   }
 
   const creditHost = document.createElement('div')
-  creditHost.style.display = 'none'
+  creditHost.className = 'cesium-credit-host'
+  creditHost.setAttribute('aria-hidden', 'true')
 
   const viewer = new Viewer(container, {
     animation: false,
@@ -64,7 +71,6 @@ export async function createStormverseGlobe(
     baseLayer: false,
   })
 
-  // Keep globe readable without a live sun/clock model in Milestone 1.
   viewer.scene.globe.enableLighting = false
   viewer.scene.globe.baseColor = Color.fromCssColorString('#0a1520')
   viewer.scene.fog.enabled = true
@@ -116,6 +122,91 @@ export async function createStormverseGlobe(
     terrainOk = false
   }
 
+  let radarLayer: ImageryLayer | null = null
+  let satelliteLayer: ImageryLayer | null = null
+  let radarVisible = true
+  let satelliteVisible = false
+  let currentRadarUrl: string | null = null
+  let currentSatUrl: string | null = null
+
+  const replaceOverlay = (
+    current: ImageryLayer | null,
+    url: string | null,
+    alpha: number,
+    credit: string,
+  ): ImageryLayer | null => {
+    if (current) {
+      viewer.imageryLayers.remove(current, true)
+    }
+    if (!url) return null
+    const provider = new UrlTemplateImageryProvider({
+      url,
+      credit: new Credit(credit, true),
+      maximumLevel: 12,
+    })
+    const layer = viewer.imageryLayers.addImageryProvider(provider)
+    layer.alpha = alpha
+    layer.show = true
+    viewer.scene.requestRender()
+    return layer
+  }
+
+  const setRadarFrame = (frame: RadarObservation | null) => {
+    const url = frame?.available ? frame.tileUrlTemplate ?? null : null
+    if (url === currentRadarUrl && radarLayer) {
+      radarLayer.show = radarVisible
+      return
+    }
+    currentRadarUrl = url
+    radarLayer = replaceOverlay(
+      radarLayer,
+      radarVisible ? url : null,
+      0.72,
+      frame?.provenance.summary ?? 'Radar',
+    )
+    if (radarLayer) radarLayer.show = radarVisible
+  }
+
+  const setRadarVisible = (visible: boolean) => {
+    radarVisible = visible
+    if (radarLayer) {
+      radarLayer.show = visible
+      viewer.scene.requestRender()
+      return
+    }
+    if (visible && currentRadarUrl) {
+      radarLayer = replaceOverlay(null, currentRadarUrl, 0.72, 'Radar © RainViewer')
+    }
+  }
+
+  const setSatelliteFrame = (frame: SatelliteObservation | null) => {
+    const url = frame?.available ? frame.tileUrlTemplate ?? null : null
+    if (url === currentSatUrl && satelliteLayer) {
+      satelliteLayer.show = satelliteVisible
+      return
+    }
+    currentSatUrl = url
+    satelliteLayer = replaceOverlay(
+      satelliteLayer,
+      satelliteVisible ? url : null,
+      0.45,
+      frame?.provenance.summary ?? 'Satellite',
+    )
+    if (satelliteLayer) satelliteLayer.show = satelliteVisible
+  }
+
+  const setSatelliteVisible = (visible: boolean) => {
+    satelliteVisible = visible
+    if (satelliteLayer) {
+      satelliteLayer.show = visible
+      viewer.scene.requestRender()
+      return
+    }
+    if (visible && currentSatUrl) {
+      satelliteLayer = replaceOverlay(null, currentSatUrl, 0.45, 'Satellite © RainViewer')
+    }
+  }
+
   const stormPosition = Cartesian3.fromDegrees(
     PROTOTYPE_STORM.longitude,
     PROTOTYPE_STORM.latitude,
@@ -134,7 +225,7 @@ export async function createStormverseGlobe(
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
     label: {
-      text: `${PROTOTYPE_STORM.name}  ·  synthetic`,
+      text: `${PROTOTYPE_STORM.name}  ·  synthetic reconstruction`,
       font: '12px "IBM Plex Sans", system-ui, sans-serif',
       fillColor: Color.WHITE,
       outlineColor: Color.BLACK,
@@ -226,6 +317,10 @@ export async function createStormverseGlobe(
     flyToStorm,
     flyHome,
     flyToCoords,
+    setRadarFrame,
+    setRadarVisible,
+    setSatelliteFrame,
+    setSatelliteVisible,
     destroy: () => {
       handler.destroy()
       if (!viewer.isDestroyed()) viewer.destroy()

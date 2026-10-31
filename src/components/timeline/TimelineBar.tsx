@@ -1,25 +1,37 @@
 import { TIMELINE } from '../../config/app'
-import type { TimelineState } from '../../lib/appState'
-import { prototypeProvider } from '../../weather'
+import type { TimelineState, ViewMode } from '../../lib/appState'
 
 interface TimelineBarProps {
+  viewMode: ViewMode
   timeline: TimelineState
+  clockLabel: string
+  note: string
+  badge: string
   onChange: (next: Partial<TimelineState>) => void
   onReset: () => void
 }
 
-function formatSimClock(simSec: number): string {
-  const iso = prototypeProvider.simTimeToIso(simSec)
-  const d = new Date(iso)
-  return d.toISOString().replace('T', ' ').replace('.000Z', 'Z')
-}
+export function TimelineBar({
+  viewMode,
+  timeline,
+  clockLabel,
+  note,
+  badge,
+  onChange,
+  onReset,
+}: TimelineBarProps) {
+  const max = Math.max(1, timeline.max)
+  const value = Math.min(timeline.cursor, max)
 
-export function TimelineBar({ timeline, onChange, onReset }: TimelineBarProps) {
   return (
-    <div className="timeline-bar" role="region" aria-label="Prototype simulation timeline">
+    <div
+      className="timeline-bar"
+      role="region"
+      aria-label={viewMode === 'globe' ? 'Observation timeline' : 'Prototype simulation timeline'}
+    >
       <div className="timeline-meta">
-        <span className="badge">Prototype simulation time</span>
-        <span className="mono">{formatSimClock(timeline.simTime)}</span>
+        <span className="badge">{badge}</span>
+        <span className="mono">{clockLabel}</span>
       </div>
       <div className="timeline-controls">
         <button
@@ -50,17 +62,13 @@ export function TimelineBar({ timeline, onChange, onReset }: TimelineBarProps) {
         className="timeline-scrub"
         type="range"
         min={0}
-        max={timeline.duration}
-        step={1}
-        value={timeline.simTime}
-        aria-label="Seek prototype simulation time"
-        onChange={(e) =>
-          onChange({ simTime: Number(e.target.value), playing: false })
-        }
+        max={max}
+        step={viewMode === 'globe' ? 1 : 1}
+        value={value}
+        aria-label="Seek timeline"
+        onChange={(e) => onChange({ cursor: Number(e.target.value), playing: false })}
       />
-      <p className="timeline-note">
-        Controls synthetic storm animation — not real-time weather observations.
-      </p>
+      <p className="timeline-note">{note}</p>
     </div>
   )
 }

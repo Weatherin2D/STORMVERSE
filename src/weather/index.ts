@@ -6,3 +6,4 @@ export {
   AustralianWeatherProvider,
   australianWeatherProvider,
 } from './adapters/AustralianWeatherAdapter'
+export { fetchOpenMeteoEnvironment } from './adapters/OpenMeteoAdapter'

@@ -10,6 +10,7 @@ interface ExplorationControlsProps {
   reducedFlash: boolean
   debugOpen: boolean
   cloudParams: CloudParams
+  satelliteAvailable: boolean
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
   onPreset: (p: StormCameraPreset) => void
@@ -20,6 +21,7 @@ interface ExplorationControlsProps {
   onReturnGlobe: () => void
   onTogglePanel: () => void
   onDemoLightning: () => void
+  onRefreshWeather: () => void
 }
 
 const PRESETS: { id: StormCameraPreset; label: string }[] = [
@@ -37,6 +39,7 @@ export function ExplorationControls({
   reducedFlash,
   debugOpen,
   cloudParams,
+  satelliteAvailable,
   onLightingMode,
   onLayers,
   onPreset,
@@ -47,6 +50,7 @@ export function ExplorationControls({
   onReturnGlobe,
   onTogglePanel,
   onDemoLightning,
+  onRefreshWeather,
 }: ExplorationControlsProps) {
   return (
     <div className="exploration-controls">
@@ -64,6 +68,34 @@ export function ExplorationControls({
           Info
         </button>
       </div>
+
+      {viewMode === 'globe' && (
+        <div className="control-cluster wrap">
+          <button
+            type="button"
+            className={layers.radar ? 'active' : ''}
+            onClick={() => onLayers({ radar: !layers.radar })}
+          >
+            Radar
+          </button>
+          <button
+            type="button"
+            className={layers.satellite ? 'active' : ''}
+            disabled={!satelliteAvailable}
+            title={
+              satelliteAvailable
+                ? 'Toggle infrared satellite mosaic'
+                : 'Infrared frames not currently in the catalog'
+            }
+            onClick={() => onLayers({ satellite: !layers.satellite })}
+          >
+            Satellite IR
+          </button>
+          <button type="button" onClick={onRefreshWeather}>
+            Refresh data
+          </button>
+        </div>
+      )}
 
       {viewMode === 'storm' && (
         <>

@@ -7,25 +7,22 @@ import { InfoPanel } from './components/panels/InfoPanel'
 import { TimelineBar } from './components/timeline/TimelineBar'
 import { createInitialAppState, type LayerState } from './lib/appState'
 import { usePrefersReducedMotion } from './hooks/usePrefersReducedMotion'
+import { useLiveWeather } from './hooks/useLiveWeather'
 import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
-import {
-  prototypeProvider,
-  type LightningObservation,
-  type WeatherObservationMeta,
-} from './weather'
-import { PROTOTYPE_STORM } from './config/app'
+import { prototypeProvider, type LightningObservation } from './weather'
+import { PROTOTYPE_STORM, TIMELINE } from './config/app'
 
 export default function App() {
   const reducedMotion = usePrefersReducedMotion()
+  const live = useLiveWeather()
   const [state, setState] = useState(() => createInitialAppState(reducedMotion))
   const [flyStormToken, setFlyStormToken] = useState(0)
   const [flyHomeToken, setFlyHomeToken] = useState(0)
   const [presetToken, setPresetToken] = useState(0)
   const [lightningToken, setLightningToken] = useState(0)
   const [lightningEvent, setLightningEvent] = useState<LightningObservation | null>(null)
-  const [availability, setAvailability] = useState<WeatherObservationMeta[]>([])
   const [syntheticLightning, setSyntheticLightning] = useState<LightningObservation[]>([])
 
   useEffect(() => {
@@ -34,23 +31,37 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      const [avail, events] = await Promise.all([
-        prototypeProvider.getAvailability(),
-        prototypeProvider.getLightning({}),
-      ])
-      if (cancelled) return
-      setAvailability(avail)
-      setSyntheticLightning(events)
-    })()
+    prototypeProvider.getLightning({}).then((events) => {
+      if (!cancelled) setSyntheticLightning(events)
+    })
     return () => {
       cancelled = true
     }
   }, [])
 
-  // Timeline clock — updates sim time; triggers synthetic lightning near event times
+  // When radar frames load, set globe timeline max to last frame index
   useEffect(() => {
-    if (state.viewMode !== 'storm') return
+    if (live.radarFrames.length === 0) return
+    setState((s) => {
+      if (s.viewMode !== 'globe') return s
+      const max = Math.max(0, live.radarFrames.length - 1)
+      return {
+        ...s,
+        timeline: {
+          ...s.timeline,
+          max,
+          cursor: max,
+          playing: true,
+        },
+        statusMessage: live.error
+          ? `Radar feed error: ${live.error}`
+          : `Live radar · ${live.radarFrames.length} frames · RainViewer`,
+      }
+    })
+  }, [live.radarFrames, live.error])
+
+  // Timeline clock
+  useEffect(() => {
     if (!state.timeline.playing) return
     let frame = 0
     let last = performance.now()
@@ -59,25 +70,52 @@ export default function App() {
       last = now
       setState((s) => {
         if (!s.timeline.playing) return s
-        const next = s.timeline.simTime + dt * s.timeline.speed
-        const wrapped = next >= s.timeline.duration ? 0 : next
-        return {
-          ...s,
-          timeline: { ...s.timeline, simTime: wrapped },
+        if (s.viewMode === 'globe') {
+          // Advance ~1 frame every 0.7s at 1×
+          const next = s.timeline.cursor + dt * s.timeline.speed * (1 / 0.7)
+          const wrapped = next > s.timeline.max ? 0 : next
+          return { ...s, timeline: { ...s.timeline, cursor: wrapped } }
         }
+        const next = s.timeline.cursor + dt * s.timeline.speed
+        const wrapped = next >= s.timeline.max ? 0 : next
+        return { ...s, timeline: { ...s.timeline, cursor: wrapped } }
       })
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [state.viewMode, state.timeline.playing, state.timeline.speed])
+  }, [state.timeline.playing, state.timeline.speed, state.viewMode])
 
-  // Fire each synthetic lightning event once when sim time crosses it
+  const radarIndex = Math.min(
+    live.radarFrames.length - 1,
+    Math.max(0, Math.round(state.timeline.cursor)),
+  )
+  const radarFrame =
+    state.viewMode === 'globe' && live.radarFrames.length > 0
+      ? live.radarFrames[radarIndex]
+      : null
+
+  const satIndex = Math.min(
+    live.satelliteFrames.length - 1,
+    Math.max(0, Math.round(state.timeline.cursor)),
+  )
+  const satelliteFrame =
+    state.viewMode === 'globe' &&
+    state.layers.satellite &&
+    live.satelliteFrames.length > 0
+      ? live.satelliteFrames[
+          Math.min(satIndex, live.satelliteFrames.length - 1)
+        ]
+      : live.satelliteFrames.length > 0
+        ? live.satelliteFrames[live.satelliteFrames.length - 1]
+        : null
+
+  // Fire synthetic lightning when storm sim time crosses events
   const lastLightningId = useRef<string | null>(null)
   useEffect(() => {
     if (state.viewMode !== 'storm' || !state.layers.lightning) return
     const base = Date.parse(prototypeProvider.getBaseTimeIso())
-    const t = base + state.timeline.simTime * 1000
+    const t = base + state.timeline.cursor * 1000
     const windowMs = 900 * Math.max(1, state.timeline.speed)
     const hit = syntheticLightning.find((e) => {
       const et = Date.parse(e.observedAt)
@@ -89,7 +127,7 @@ export default function App() {
       setLightningToken((n) => n + 1)
     }
   }, [
-    state.timeline.simTime,
+    state.timeline.cursor,
     state.viewMode,
     state.layers.lightning,
     state.timeline.speed,
@@ -102,18 +140,34 @@ export default function App() {
       viewMode: 'storm',
       statusMessage: `${PROTOTYPE_STORM.name} - synthetic demonstration environment`,
       panelOpen: true,
+      timeline: {
+        playing: true,
+        cursor: 0,
+        speed: TIMELINE.defaultSpeed,
+        max: TIMELINE.durationSec,
+      },
     }))
     setPresetToken((n) => n + 1)
   }, [])
 
   const returnGlobe = useCallback(() => {
+    const max = Math.max(0, live.radarFrames.length - 1)
     setState((s) => ({
       ...s,
       viewMode: 'globe',
-      statusMessage: 'Returned to Earth view',
+      statusMessage:
+        live.radarFrames.length > 0
+          ? `Live radar · ${live.radarFrames.length} frames · RainViewer`
+          : 'Returned to Earth view',
+      timeline: {
+        playing: true,
+        cursor: max,
+        speed: TIMELINE.defaultSpeed,
+        max,
+      },
     }))
     setFlyHomeToken((n) => n + 1)
-  }, [])
+  }, [live.radarFrames.length])
 
   const approachThenEnter = useCallback(() => {
     if (state.viewMode === 'globe') {
@@ -148,65 +202,108 @@ export default function App() {
   const brandNote = useMemo(
     () =>
       state.viewMode === 'globe'
-        ? 'Global exploration · Australia-first prototype'
+        ? 'Global exploration · live radar (Australia-first)'
         : 'Storm environment · not live weather',
     [state.viewMode],
   )
 
+  const clockLabel = useMemo(() => {
+    if (state.viewMode === 'globe') {
+      if (!radarFrame) return live.loading ? 'Loading frames…' : 'No radar frames'
+      return radarFrame.observedAt.replace('T', ' ').replace('.000Z', 'Z')
+    }
+    return prototypeProvider
+      .simTimeToIso(state.timeline.cursor)
+      .replace('T', ' ')
+      .replace('.000Z', 'Z')
+  }, [state.viewMode, state.timeline.cursor, radarFrame, live.loading])
+
+  const timelineNote =
+    state.viewMode === 'globe'
+      ? 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
+      : 'Controls synthetic storm animation — not real-time weather observations.'
+
+  const timelineBadge =
+    state.viewMode === 'globe' ? 'Observation time' : 'Prototype simulation time'
+
   return (
-    <AppShell brandNote={brandNote} statusMessage={state.statusMessage} overlay={
-      <>
-        <ExplorationControls
-          viewMode={state.viewMode}
-          lightingMode={state.lightingMode}
-          layers={state.layers}
-          reducedFlash={state.reducedFlash}
-          debugOpen={state.debugOpen}
-          cloudParams={state.cloudParams}
-          onLightingMode={setLightingMode}
-          onLayers={setLayers}
-          onPreset={setPreset}
-          onReducedFlash={(reducedFlash) => setState((s) => ({ ...s, reducedFlash }))}
-          onToggleDebug={() => setState((s) => ({ ...s, debugOpen: !s.debugOpen }))}
-          onCloudParams={setCloudParams}
-          onEnterStorm={approachThenEnter}
-          onReturnGlobe={returnGlobe}
-          onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
-          onDemoLightning={() => {
-            setLightningEvent(null)
-            setLightningToken((n) => n + 1)
-          }}
-        />
-        <InfoPanel
-          open={state.panelOpen}
-          viewMode={state.viewMode}
-          availability={availability}
-          onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
-          onEnterStorm={approachThenEnter}
-          onReturnGlobe={returnGlobe}
-        />
-        {state.viewMode === 'storm' && (
+    <AppShell
+      brandNote={brandNote}
+      statusMessage={state.statusMessage}
+      overlay={
+        <>
+          <ExplorationControls
+            viewMode={state.viewMode}
+            lightingMode={state.lightingMode}
+            layers={state.layers}
+            reducedFlash={state.reducedFlash}
+            debugOpen={state.debugOpen}
+            cloudParams={state.cloudParams}
+            satelliteAvailable={live.satelliteFrames.length > 0}
+            onLightingMode={setLightingMode}
+            onLayers={setLayers}
+            onPreset={setPreset}
+            onReducedFlash={(reducedFlash) => setState((s) => ({ ...s, reducedFlash }))}
+            onToggleDebug={() => setState((s) => ({ ...s, debugOpen: !s.debugOpen }))}
+            onCloudParams={setCloudParams}
+            onEnterStorm={approachThenEnter}
+            onReturnGlobe={returnGlobe}
+            onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
+            onDemoLightning={() => {
+              setLightningEvent(null)
+              setLightningToken((n) => n + 1)
+            }}
+            onRefreshWeather={live.refresh}
+          />
+          <InfoPanel
+            open={state.panelOpen}
+            viewMode={state.viewMode}
+            availability={live.availability}
+            environment={live.environment}
+            radarLabel={
+              radarFrame
+                ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}`
+                : null
+            }
+            loading={live.loading}
+            error={live.error}
+            onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
+            onEnterStorm={approachThenEnter}
+            onReturnGlobe={returnGlobe}
+          />
           <TimelineBar
+            viewMode={state.viewMode}
             timeline={state.timeline}
+            clockLabel={clockLabel}
+            note={timelineNote}
+            badge={timelineBadge}
             onChange={(partial) =>
               setState((s) => ({ ...s, timeline: { ...s.timeline, ...partial } }))
             }
             onReset={() =>
               setState((s) => ({
                 ...s,
-                timeline: { ...s.timeline, simTime: 0, playing: true },
+                timeline: {
+                  ...s.timeline,
+                  cursor: s.viewMode === 'globe' ? s.timeline.max : 0,
+                  playing: true,
+                },
               }))
             }
           />
-        )}
-      </>
-    }>
+        </>
+      }
+    >
       {state.viewMode === 'globe' ? (
         <GlobeView
           active
           requestFlyToStorm={flyStormToken}
           requestFlyHome={flyHomeToken}
           onEnterStorm={enterStorm}
+          radarFrame={radarFrame}
+          satelliteFrame={satelliteFrame}
+          radarVisible={state.layers.radar}
+          satelliteVisible={state.layers.satellite}
         />
       ) : (
         <StormView
@@ -216,7 +313,7 @@ export default function App() {
           layers={state.layers}
           cloudParams={state.cloudParams}
           flashFreq={state.flashFreq}
-          simTime={state.timeline.simTime}
+          simTime={state.timeline.cursor}
           reducedFlash={state.reducedFlash}
           cameraPreset={state.cameraPreset}
           presetToken={presetToken}

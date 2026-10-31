@@ -110,7 +110,11 @@ export function StormView({
   }, [lightingMode])
 
   useEffect(() => {
-    sceneRef.current?.setLayers(layers)
+    sceneRef.current?.setLayers({
+      clouds: layers.clouds,
+      lightning: layers.lightning,
+      precipitation: layers.precipitation,
+    })
   }, [layers])
 
   useEffect(() => {

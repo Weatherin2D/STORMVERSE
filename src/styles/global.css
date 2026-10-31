@@ -179,6 +179,11 @@ button {
   border-color: var(--border-strong);
 }
 
+.control-cluster button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .control-cluster button.active,
 .timeline-controls button.active {
   border-color: var(--accent);

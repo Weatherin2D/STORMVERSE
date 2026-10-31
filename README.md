@@ -2,10 +2,6 @@
 
 Immersive browser-based 3D thunderstorm exploration platform.
 
-Milestone 1 delivers an interactive Cesium Earth, a prototype Three.js thunderstorm environment with volumetric cloud rendering, day/sunset/night lighting, synthetic lightning, a simulation timeline, and typed weather-data interfaces prepared for Australian observations.
-
-**This build does not consume or display live weather observations.** Clouds, lightning, precipitation shafts, and timeline playback are synthetic / procedural demonstrations and are labelled as such in the UI.
-
 ## Run locally
 
 ```bash
@@ -28,49 +24,60 @@ Copy `.env.example` to `.env` and set:
 VITE_CESIUM_ION_TOKEN=your_token_here
 ```
 
-With a token, Cesium World Imagery and world terrain are used. Without one, the globe falls back to OpenStreetMap raster tiles so the app remains usable.
+Without a token, the globe uses OpenStreetMap tiles.
+
+## Milestone status
+
+### Milestone 1 — Visual prototype
+
+- Interactive Cesium Earth
+- Ray-marched prototype thunderstorm (synthetic)
+- Day / sunset / night lighting, lightning, precip shafts
+- Camera presets, layer toggles, prototype timeline
+- Typed weather provider interfaces
+
+### Milestone 2 — Live Australian-focused observations (current)
+
+- **RainViewer public API** radar reflectivity mosaics on the globe (processed imagery)
+- Timeline scrubbing of real radar frame times
+- Infrared satellite overlay when the RainViewer catalog publishes frames
+- **Open-Meteo** model environmental context at the prototype site (labelled as model, not observation)
+- Clear provenance for every product; lightning + storm tracks remain unavailable from this feed
+- 3D storm scene stays a **synthetic reconstruction** — not derived from the radar tiles
+
+## Scientific integrity
+
+| Visual | Interpretation |
+| --- | --- |
+| Globe radar mosaic | Processed composite imagery via RainViewer — not a BoM volume product |
+| Satellite IR (when available) | Processed mosaic via RainViewer |
+| Open-Meteo panel fields | Numerical model / forecast context |
+| 3D clouds, bolts, rain shafts | Synthetic / procedural demonstration |
+| Prototype storm marker | Demonstration target, not a tracked storm cell |
+
+## Known limitations
+
+- No BoM direct radar volumes, no licensed lightning network, no automated cell tracks
+- RainViewer frames are global composites; colour scale is relative, not calibrated dBZ grids
+- Satellite IR may be empty depending on catalog contents
+- Storm 3D scene is not georegistered onto the Cesium globe
+- Dual-renderer depth sync is deferred
+
+## Next milestone ideas
+
+1. Licensed Australian lightning events mapped onto globe + storm illumination
+2. Radar-derived storm-cell tracks (documented algorithm + confidence)
+3. Optional BoM or commercial radar volume / cross-section products under proper licensing
+4. Drive reconstruction parameters from observed products where scientifically justified
+
+Do not scrape restricted services. Respect provider terms and licensing.
 
 ## Stack
 
 - Vite + React 18 + TypeScript
-- CesiumJS — interactive Earth, geographic navigation
-- Three.js — storm-volume ray marching, lightning, precipitation visuals
-
-Globe and storm run as **separate view modes** with coordinated transitions (full Cesium↔Three depth sync is deferred).
-
-## Milestone 1 features
-
-- Interactive Earth with Australia-centred home view
-- Prototype storm marker (inland NSW) clearly marked synthetic
-- Enter / return transitions between globe and storm
-- Ray-marched cumulonimbus with tower, anvil, base, haze
-- Day, sunset, and night lighting (night is genuinely dark)
-- Lightning with local cloud illumination + reduced-flash option
-- Visual rain shafts (not measured precipitation)
-- Camera presets: overview, cloud top, side, ground, radar-oriented
-- Layer toggles and cloud parameter tuning panel
-- Prototype simulation timeline (play / pause / seek / speed)
-- Weather provider interfaces + Prototype adapter + Australian stub
-
-## Known limitations
-
-- No live radar, satellite, or lightning feeds
-- Storm scene is a local Three.js environment, not georegistered on the Cesium globe
-- Cloud ray marching quality adapts on low-power devices but is still GPU-heavy
-- OSM fallback imagery is not photorealistic globe imagery
-- Synthetic storm track is illustrative only (confidence intentionally unset)
-
-## Next milestone — Australian observations
-
-Architecture is ready for replaceable providers under `src/weather/`:
-
-1. Implement a licensed Australian radar adapter (`radar_reflectivity` / `radar_volume`) with observation time, coverage, and provenance.
-2. Add satellite IR/visible products with the same `WeatherObservationMeta` contract.
-3. Wire detected lightning events into `LightningSystem` (renderer already accepts `LightningObservation`).
-4. Drive storm marker position from `StormTrack` points on the globe timeline.
-5. Keep procedural clouds labelled **reconstruction** unless density is derived from a documented product.
-
-Do not scrape restricted services. Respect provider terms and licensing.
+- CesiumJS — Earth + observation overlays
+- Three.js — storm volume rendering
+- RainViewer + Open-Meteo — public weather feeds
 
 ## Project layout
 
@@ -78,7 +85,8 @@ Do not scrape restricted services. Respect provider terms and licensing.
 src/
   components/     # UI: globe, storm, controls, panels, timeline
   rendering/      # Cesium globe, cloud volume, lightning, precip, atmosphere
-  weather/        # Typed observations + provider adapters
-  config/         # App + prototype storm configuration
+  weather/        # Typed observations + RainViewer / Open-Meteo / prototype adapters
+  config/         # App + weather endpoint configuration
+  hooks/          # Live weather + a11y hooks
   lib/            # App state helpers
 ```
