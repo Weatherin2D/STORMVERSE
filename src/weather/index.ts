@@ -17,6 +17,11 @@ export {
 } from './adapters/cloudCoverGrid'
 export { sampleSatelliteIrCloudField } from './adapters/satelliteIrClouds'
 export { sampleRadarCloudProxies } from './adapters/radarCloudProxy'
+export {
+  buildImageryCloudField,
+  type ImageryCloudField,
+  type ImageryCloudTile,
+} from './adapters/imageryCloudTiles'
 export { deriveTracksFromRadarFrames } from './reconstruction/deriveTracks'
 export {
   mapEnvironmentToReconstruction,

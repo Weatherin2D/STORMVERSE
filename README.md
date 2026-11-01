@@ -156,8 +156,8 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Rain shafts | **Derived** cues at RainViewer-driven cell heads — not measured volumes |
-| Global cloud field | RainViewer IR samples → thick volumetric puffs/cores (not retrieved CTH/COT); Open-Meteo bands as fallback proxies |
-| Satellite IR | Processed RainViewer infrared mosaic (also sampled for cloud masses) |
+| Global cloud field | Mosaic-shaped altitude sheets + dense in-footprint fill from RainViewer IR/radar tile alpha (height heuristics — not retrieved CTH/COT); Open-Meteo cover as fallback |
+| Satellite IR | Processed RainViewer infrared mosaic (preferred cloud-shape source when published) |
 | Cell tracks | Derived heuristic (low confidence) |
 | Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |

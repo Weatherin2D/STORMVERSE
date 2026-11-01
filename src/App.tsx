@@ -257,10 +257,12 @@ export default function App() {
             ? ' · deriving tracks…'
             : ''
       const cloudNote = live.cloudFieldLoading
-        ? ' · cloud grid…'
-        : live.cloudField.length > 0
-          ? ` · ${live.cloudField.length} cloud pts`
-          : ''
+        ? ' · shaping clouds…'
+        : live.cloudTiles.length > 0
+          ? ` · ${live.cloudTiles.length} mosaic sheets · ${live.cloudField.length} fill`
+          : live.cloudField.length > 0
+            ? ` · ${live.cloudField.length} cloud pts`
+            : ''
       const lghtNote =
         live.lightningConfigured && live.lightningEvents.length > 0
           ? filteredLightningEvents.length === live.lightningEvents.length
@@ -288,6 +290,7 @@ export default function App() {
     live.lightningConfigured,
     live.lightningEvents.length,
     live.cloudField.length,
+    live.cloudTiles.length,
     live.cloudFieldLoading,
     filteredLightningEvents.length,
     state.layers.tracks,
@@ -837,6 +840,8 @@ export default function App() {
             loading={live.loading}
             error={live.error}
             cloudFieldCount={live.cloudField.length}
+            cloudTileCount={live.cloudTiles.length}
+            cloudFieldSource={live.cloudFieldSource}
             cloudFieldLoading={live.cloudFieldLoading}
             cloudFieldError={live.cloudFieldError}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
@@ -1041,6 +1046,7 @@ export default function App() {
         volumeTargets={globeVolumeTargets}
         volumeVisible={state.layers.volume}
         cloudField={live.cloudField}
+        cloudTiles={live.cloudTiles}
         cloudsVisible={state.layers.clouds}
         precipitationVisible={state.layers.precipitation}
         lightingMode={state.lightingMode}

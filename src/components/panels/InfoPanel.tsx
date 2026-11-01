@@ -81,6 +81,8 @@ interface InfoPanelProps {
   onExitImmersive: () => void
   onSelectTrack: (trackId: string) => void
   cloudFieldCount: number
+  cloudTileCount: number
+  cloudFieldSource: 'infrared' | 'radar' | 'model' | null
   cloudFieldLoading: boolean
   cloudFieldError: string | null
   onLightningFilterChange: (next: LightningQualityFilter) => void
@@ -164,6 +166,8 @@ export function InfoPanel({
   onExitImmersive,
   onSelectTrack,
   cloudFieldCount,
+  cloudTileCount,
+  cloudFieldSource,
   cloudFieldLoading,
   cloudFieldError,
   onLightningFilterChange,
@@ -218,10 +222,12 @@ export function InfoPanel({
           <p className="provenance">
             <strong>Cloud field:</strong>{' '}
             {cloudFieldLoading
-              ? 'Loading Open-Meteo cloud-cover grid…'
+              ? 'Shaping mosaic cloud footprints…'
               : cloudFieldError
                 ? cloudFieldError
-                : `${cloudFieldCount} IR/model volumetric masses (brightness→height heuristics — not retrieved CTH)`}
+                : cloudTileCount > 0
+                  ? `${cloudTileCount} mosaic sheets + ${cloudFieldCount} in-shape fill (${cloudFieldSource ?? 'imagery'}; silhouette from tile alpha — height heuristics, not retrieved CTH)`
+                  : `${cloudFieldCount} model cloud masses (Open-Meteo cover — not retrieved CTH)`}
           </p>
           {error && <p className="provenance">{error}</p>}
 
@@ -574,7 +580,13 @@ export function InfoPanel({
             </div>
             <div>
               <dt>Cloud field</dt>
-              <dd>{cloudFieldLoading ? 'Loading…' : `${cloudFieldCount} samples`}</dd>
+              <dd>
+                {cloudFieldLoading
+                  ? 'Loading…'
+                  : cloudTileCount > 0
+                    ? `${cloudTileCount} sheets · ${cloudFieldCount} fill`
+                    : `${cloudFieldCount} samples`}
+              </dd>
             </div>
             <div>
               <dt>Lightning</dt>

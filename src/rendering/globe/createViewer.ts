@@ -25,6 +25,7 @@ import type {
 } from '../../weather/types/observations'
 import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
 import type { CloudFieldPoint } from '../../weather/adapters/cloudCoverGrid'
+import type { ImageryCloudTile } from '../../weather/adapters/imageryCloudTiles'
 import { lightningMarkerColor } from '../../weather/reconstruction/lightningQuality'
 import {
   createGeoregisteredVolume,
@@ -70,7 +71,10 @@ export interface StormverseGlobe {
   setVolumeTarget: (target: ReconstructionTarget | null) => void
   setVolumeTargets: (targets: ReconstructionTarget[]) => void
   setVolumeVisible: (visible: boolean) => void
-  setCloudField: (points: CloudFieldPoint[]) => void
+  setCloudField: (field: {
+    points: CloudFieldPoint[]
+    tiles?: ImageryCloudTile[]
+  }) => void
   setCloudsVisible: (visible: boolean) => void
   setPrecipitationVisible: (visible: boolean) => void
   setRainFromTracks: (tracks: StormTrack[], targets?: ReconstructionTarget[]) => void
@@ -567,7 +571,7 @@ export async function createStormverseGlobe(
       rain.setFromTracks(lastTracks, lastVolumeTargets)
     },
     setVolumeVisible: (v) => volume.setVisible(v),
-    setCloudField: (points) => clouds.setPoints(points),
+    setCloudField: (field) => clouds.setField(field),
     setCloudsVisible: (v) => clouds.setVisible(v),
     setPrecipitationVisible: (v) => rain.setVisible(v),
     setRainFromTracks: (tracks, targets) => {

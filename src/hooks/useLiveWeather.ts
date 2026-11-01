@@ -5,12 +5,11 @@ import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
   createTruthCellsProviderFromEnv,
+  buildImageryCloudField,
   fetchCloudCoverGrid,
   fetchOpenMeteoEnvironment,
   matchTracksToTruth,
   sampleLightningUrl,
-  sampleRadarCloudProxies,
-  sampleSatelliteIrCloudField,
   sampleTruthCellsUrl,
   samplesToCloudFieldPoints,
   scoreTracks,
@@ -18,6 +17,7 @@ import {
   summarizeTrackTruth,
   truthCellsFromTracks,
   type CloudFieldPoint,
+  type ImageryCloudTile,
   type LightningObservation,
   type RadarObservation,
   type SatelliteObservation,
@@ -105,6 +105,8 @@ export interface LiveWeatherState {
     opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
   ) => { ok: boolean; message: string }
   cloudField: CloudFieldPoint[]
+  cloudTiles: ImageryCloudTile[]
+  cloudFieldSource: 'infrared' | 'radar' | 'model' | null
   cloudFieldLoading: boolean
   cloudFieldError: string | null
   clearCaseStudy: () => void
@@ -144,6 +146,10 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     listCaseStudyShelf(),
   )
   const [cloudField, setCloudField] = useState<CloudFieldPoint[]>([])
+  const [cloudTiles, setCloudTiles] = useState<ImageryCloudTile[]>([])
+  const [cloudFieldSource, setCloudFieldSource] = useState<
+    'infrared' | 'radar' | 'model' | null
+  >(null)
   const [cloudFieldLoading, setCloudFieldLoading] = useState(false)
   const [cloudFieldError, setCloudFieldError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
@@ -195,56 +201,54 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
 
     ;(async () => {
       try {
-        // Prefer RainViewer IR; if catalog has no IR, sample radar mosaics; enrich with Open-Meteo.
+        // Prefer mosaic-shaped sheets (IR, else radar) so clouds fill the observed footprint.
         const sat =
           satelliteFrames.find((f) => f.available && f.tileUrlTemplate) ??
           (await australianWeatherProvider.getSatellite({})).find(
             (f) => f.available && f.tileUrlTemplate,
           ) ??
           null
-        let points = await sampleSatelliteIrCloudField(sat, {
+        const radar =
+          radarFrames.find((f) => f.available && f.tileUrlTemplate) ??
+          (await australianWeatherProvider.getRadar({})).find(
+            (f) => f.available && f.tileUrlTemplate,
+          ) ??
+          null
+
+        const shaped = await buildImageryCloudField({
+          satellite: sat,
+          radar,
           signal: controller.signal,
-          maxPoints: 850,
-          zoom: 4,
         })
-        if (points.length < 40) {
-          const radar =
-            radarFrames.find((f) => f.available && f.tileUrlTemplate) ??
-            (await australianWeatherProvider.getRadar({})).find(
-              (f) => f.available && f.tileUrlTemplate,
-            ) ??
-            null
-          const radarPts = await sampleRadarCloudProxies(radar, {
-            signal: controller.signal,
-            maxPoints: 650,
-            zoom: 5,
-          })
-          points = [...points, ...radarPts]
+
+        if (shaped && (shaped.tiles.length > 0 || shaped.fillPoints.length > 0)) {
+          if (cancelled) return
+          setCloudTiles(shaped.tiles)
+          setCloudField(shaped.fillPoints)
+          setCloudFieldSource(shaped.source)
+          setCloudFieldLoading(false)
+          setCloudFieldError(null)
+          return
         }
-        if (points.length < 80) {
-          const samples = await fetchCloudCoverGrid(controller.signal)
-          const modelPts = samplesToCloudFieldPoints(samples)
-          points = [...points, ...modelPts]
-        }
-        // De-dupe near-identical lon/lat
-        const seen = new Set<string>()
-        const deduped = points.filter((p) => {
-          const k = `${p.longitude.toFixed(2)},${p.latitude.toFixed(2)},${p.band}`
-          if (seen.has(k)) return false
-          seen.add(k)
-          return true
-        })
+
+        // Fallback: Open-Meteo cloud-cover grid (no mosaic footprint available).
+        const samples = await fetchCloudCoverGrid(controller.signal)
+        const modelPts = samplesToCloudFieldPoints(samples)
         if (cancelled) return
-        setCloudField(deduped.slice(0, 1000))
+        setCloudTiles([])
+        setCloudField(modelPts.slice(0, 1000))
+        setCloudFieldSource(modelPts.length > 0 ? 'model' : null)
         setCloudFieldLoading(false)
         setCloudFieldError(
-          deduped.length === 0
+          modelPts.length === 0
             ? 'Cloud field empty — waiting for RainViewer / Open-Meteo'
             : null,
         )
       } catch (err) {
         if (cancelled) return
         setCloudField([])
+        setCloudTiles([])
+        setCloudFieldSource(null)
         setCloudFieldError(err instanceof Error ? err.message : 'Cloud field failed')
         setCloudFieldLoading(false)
       }
@@ -707,6 +711,8 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     backupCaseStudyShelf,
     restoreCaseStudyShelfText,
     cloudField,
+    cloudTiles,
+    cloudFieldSource,
     cloudFieldLoading,
     cloudFieldError,
     clearCaseStudy,

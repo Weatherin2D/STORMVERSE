@@ -5,6 +5,7 @@ import {
 } from '../../rendering/globe/createViewer'
 import type {
   CloudFieldPoint,
+  ImageryCloudTile,
   LightningObservation,
   RadarObservation,
   SatelliteObservation,
@@ -42,6 +43,7 @@ interface GlobeViewProps {
   volumeTargets: ReconstructionTarget[]
   volumeVisible: boolean
   cloudField: CloudFieldPoint[]
+  cloudTiles: ImageryCloudTile[]
   cloudsVisible: boolean
   precipitationVisible: boolean
   lightingMode: LightingMode
@@ -72,6 +74,7 @@ export function GlobeView({
   volumeTargets,
   volumeVisible,
   cloudField,
+  cloudTiles,
   cloudsVisible,
   precipitationVisible,
   lightingMode,
@@ -114,7 +117,7 @@ export function GlobeView({
         globe.setLightningEvents(lightningEvents)
         if (volumeTargets.length > 0) globe.setVolumeTargets(volumeTargets)
         else if (volumeTarget) globe.setVolumeTarget(volumeTarget)
-        globe.setCloudField(cloudField)
+        globe.setCloudField({ points: cloudField, tiles: cloudTiles })
         globe.setRainFromTracks(tracks, volumeTargets)
         globe.setSolarTime({ mode: lightingMode, observedAt, focusLon, focusLat })
         globe.setImmersive(immersive)
@@ -199,8 +202,8 @@ export function GlobeView({
   }, [volumeVisible])
 
   useEffect(() => {
-    globeRef.current?.setCloudField(cloudField)
-  }, [cloudField])
+    globeRef.current?.setCloudField({ points: cloudField, tiles: cloudTiles })
+  }, [cloudField, cloudTiles])
 
   useEffect(() => {
     globeRef.current?.setCloudsVisible(cloudsVisible)

@@ -7,19 +7,21 @@ import {
   Color,
   GeometryInstance,
   HorizontalOrigin,
+  ImageMaterialProperty,
   Matrix4,
   NearFarScalar,
   Primitive,
+  Rectangle,
   Transforms,
   VertexFormat,
   VerticalOrigin,
   type Viewer,
 } from 'cesium'
-// BillboardCollection provides meter-scale fluffy puffs; Primitive boxes add ray-marched cores.
 import type { CloudFieldPoint } from '../../weather/adapters/cloudCoverGrid'
+import type { ImageryCloudTile } from '../../weather/adapters/imageryCloudTiles'
 
 export interface GlobalCloudFieldHandle {
-  setPoints: (points: CloudFieldPoint[]) => void
+  setField: (field: { points: CloudFieldPoint[]; tiles?: ImageryCloudTile[] }) => void
   setVisible: (visible: boolean) => void
   setImmersiveEmphasis: (immersive: boolean) => void
   destroy: () => void
@@ -39,7 +41,6 @@ function makeCloudTexture(seed: number): HTMLCanvasElement {
   const ctx = canvas.getContext('2d')!
   ctx.clearRect(0, 0, size, size)
 
-  // Soft volumetric puff: layered radial gradients (MSFS / flight-sim style billboard)
   const blobs = 7 + (seed % 4)
   for (let i = 0; i < blobs; i++) {
     const t = (i + 1) / blobs
@@ -55,12 +56,15 @@ function makeCloudTexture(seed: number): HTMLCanvasElement {
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.fill()
   }
-  // Soft vignette so edges fade cleanly
-  const edge = ctx.createRadialGradient(size / 2, size / 2, size * 0.2, size / 2, size / 2, size * 0.52)
-  edge.addColorStop(0, 'rgba(255,255,255,0)')
-  edge.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.globalCompositeOperation = 'destination-in'
-  const mask = ctx.createRadialGradient(size / 2, size * 0.52, size * 0.05, size / 2, size * 0.48, size * 0.5)
+  const mask = ctx.createRadialGradient(
+    size / 2,
+    size * 0.52,
+    size * 0.05,
+    size / 2,
+    size * 0.48,
+    size * 0.5,
+  )
   mask.addColorStop(0, 'rgba(0,0,0,1)')
   mask.addColorStop(0.7, 'rgba(0,0,0,0.85)')
   mask.addColorStop(1, 'rgba(0,0,0,0)')
@@ -188,16 +192,18 @@ void main() {
 }
 
 /**
- * Thick, meter-scale cloud masses: soft billboard puffs + ray-marched volumetric cores.
- * Field points should come from RainViewer IR sampling (preferred) or model cloud-cover.
+ * Imagery-shaped cloud masses: mosaic-textured altitude sheets (exact footprint)
+ * plus dense overlapping billboards only where imagery has signal.
  */
 export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   const textures = [0, 1, 2, 3].map((s) => makeCloudTexture(s + 11))
   let billboards: BillboardCollection | null = null
   let volumePrimitives: Primitive[] = []
+  const sheetEntityIds: string[] = []
   let visible = true
   let immersive = false
   let cached: CloudFieldPoint[] = []
+  let cachedTiles: ImageryCloudTile[] = []
 
   const clear = () => {
     if (billboards) {
@@ -208,17 +214,45 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
       viewer.scene.primitives.remove(p)
     }
     volumePrimitives = []
+    for (const id of sheetEntityIds) {
+      viewer.entities.removeById(id)
+    }
+    sheetEntityIds.length = 0
+  }
+
+  const addSheets = (tile: ImageryCloudTile, tileIndex: number) => {
+    const layers = immersive ? 5 : 4
+    const span = Math.max(800, tile.topHeightM - tile.baseHeightM)
+    const alpha = Math.min(0.78, 0.28 + tile.meanIntensity * 0.55)
+    for (let L = 0; L < layers; L++) {
+      const t = L / (layers - 1)
+      const h = tile.baseHeightM + t * span
+      const id = `cloud-sheet-${tile.z}-${tile.x}-${tile.y}-L${L}-${tileIndex}`
+      viewer.entities.add({
+        id,
+        show: true,
+        rectangle: {
+          coordinates: Rectangle.fromDegrees(tile.west, tile.south, tile.east, tile.north),
+          height: h,
+          material: new ImageMaterialProperty({
+            image: tile.cloudImage,
+            transparent: true,
+            color: Color.fromBytes(255, 255, 255, Math.floor(alpha * 255 * (0.7 + t * 0.3))),
+          }),
+        },
+      })
+      sheetEntityIds.push(id)
+    }
   }
 
   const addVolume = (p: CloudFieldPoint) => {
-    const width = Math.max(12_000, (p.horizontalScaleM || 24_000) * 0.85)
+    const width = Math.max(8_000, (p.horizontalScaleM || 24_000) * 1.1)
     const depth = width * 0.9
-    const height = Math.max(3_500, p.thicknessM)
+    const height = Math.max(3_000, p.thicknessM)
     const dims = { width, depth, height }
     const base = Math.max(400, p.heightM - height * 0.45)
     const origin = Cartesian3.fromDegrees(p.longitude, p.latitude, base)
     const enu = Transforms.eastNorthUpToFixedFrame(origin)
-    // Map box Y to ENU up (same trick as GeoregisteredVolume)
     const swapYZ = new Matrix4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1)
     const lift = Matrix4.fromTranslation(new Cartesian3(0, 0, height * 0.5), new Matrix4())
     const local = Matrix4.multiply(lift, swapYZ, new Matrix4())
@@ -261,13 +295,32 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
 
   const rebuild = () => {
     clear()
-    if (!visible || cached.length === 0) {
+    if (!visible || (cached.length === 0 && cachedTiles.length === 0)) {
       viewer.scene.requestRender()
       return
     }
 
-    const maxBillboardCells = immersive ? 520 : 360
-    const maxVolumes = immersive ? 48 : 28
+    const shaped = cachedTiles.length > 0
+    // Mosaic-textured altitude sheets — silhouette matches imagery alpha exactly.
+    if (shaped) {
+      const maxTiles = immersive ? 48 : 36
+      cachedTiles
+        .slice()
+        .sort((a, b) => b.meanIntensity - a.meanIntensity)
+        .slice(0, maxTiles)
+        .forEach((tile, i) => addSheets(tile, i))
+    }
+
+    // Dense in-shape fill: many small overlapping puffs where mosaic has signal.
+    // Sparse model fallback: fewer, larger masses.
+    const maxBillboardCells = shaped
+      ? immersive
+        ? 2800
+        : 2000
+      : immersive
+        ? 520
+        : 360
+    const maxVolumes = shaped ? (immersive ? 36 : 22) : immersive ? 48 : 28
     const sorted = [...cached].sort(
       (a, b) => (b.volumeStrength || b.cover) - (a.volumeStrength || a.cover),
     )
@@ -277,12 +330,18 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
     viewer.scene.primitives.add(billboards)
 
     cells.forEach((p, i) => {
-      const scale = Math.max(10_000, p.horizontalScaleM || 24_000) * (immersive ? 1.15 : 1)
+      const pixelScale = p.horizontalScaleM || 24_000
+      // Imagery fill uses ~pixel footprint; model points keep larger masses.
+      const scale = shaped
+        ? Math.max(1_800, pixelScale) * (immersive ? 1.35 : 1.2)
+        : Math.max(10_000, pixelScale) * (immersive ? 1.15 : 1)
       const baseH = Math.max(600, p.heightM - p.thicknessM * 0.35)
-      const thick = Math.max(2_500, p.thicknessM)
-      const layers = Math.min(10, 4 + Math.floor(p.cover * 6))
+      const thick = Math.max(2_000, p.thicknessM)
+      const layers = shaped
+        ? Math.min(4, 2 + Math.floor(p.cover * 2.5))
+        : Math.min(10, 4 + Math.floor(p.cover * 6))
       const [r, g, b] = BAND_RGB[p.band]
-      const alpha = Math.min(0.92, 0.28 + p.cover * 0.55 + (immersive ? 0.08 : 0))
+      const alpha = Math.min(0.9, 0.22 + p.cover * 0.55 + (immersive ? 0.08 : 0))
 
       const metersToDegLat = 1 / 111_320
       const metersToDegLon =
@@ -291,35 +350,42 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
       for (let L = 0; L < layers; L++) {
         const t = layers === 1 ? 0.5 : L / (layers - 1)
         const h = baseH + t * thick
-        // Lateral jitter so masses read as 3D piles, not flat discs
+        // Tiny lateral jitter only — keep mass inside the mosaic silhouette.
         const ang = (i * 1.7 + L * 2.3) % (Math.PI * 2)
-        const radM = scale * 0.12 * (0.35 + (L % 3) * 0.25)
+        const radM = scale * (shaped ? 0.04 : 0.12) * (0.35 + (L % 3) * 0.25)
         const east = radM * Math.cos(ang)
         const north = radM * Math.sin(ang)
         const lon = p.longitude + east * metersToDegLon
         const lat = p.latitude + north * metersToDegLat
 
-        const size = scale * (0.55 + (1 - Math.abs(t - 0.45)) * 0.55) * (0.75 + p.cover * 0.4)
+        const size = shaped
+          ? scale * (0.95 + (1 - Math.abs(t - 0.45)) * 0.25)
+          : scale * (0.55 + (1 - Math.abs(t - 0.45)) * 0.55) * (0.75 + p.cover * 0.4)
         billboards!.add({
           position: Cartesian3.fromDegrees(lon, lat, h),
           image: textures[(i + L) % textures.length],
           width: size,
-          height: size * (0.55 + (1 - t) * 0.25),
+          height: size * (shaped ? 0.48 + (1 - t) * 0.2 : 0.55 + (1 - t) * 0.25),
           sizeInMeters: true,
           verticalOrigin: VerticalOrigin.CENTER,
           horizontalOrigin: HorizontalOrigin.CENTER,
           color: Color.fromBytes(r, g, b, Math.floor(alpha * 255 * (0.75 + t * 0.25))),
           alignedAxis: Cartesian3.UNIT_Z,
           disableDepthTestDistance: immersive ? 5.0e5 : Number.POSITIVE_INFINITY,
-          scaleByDistance: new NearFarScalar(2.0e4, 1.15, 4.0e6, 0.35),
+          scaleByDistance: new NearFarScalar(2.0e4, 1.1, 4.0e6, shaped ? 0.45 : 0.35),
           translucencyByDistance: new NearFarScalar(8.0e3, 1.0, 6.0e6, 0.25),
         })
       }
     })
 
-    // Ray-marched volumetric cores for the strongest IR cells
     sorted.slice(0, maxVolumes).forEach((p) => {
-      if ((p.volumeStrength || p.cover) < 0.35) return
+      if ((p.volumeStrength || p.cover) < (shaped ? 0.45 : 0.35)) return
+      // Keep volumes tight to the footprint when shaped.
+      if (shaped && (p.horizontalScaleM || 0) > 0) {
+        const tight = { ...p, horizontalScaleM: Math.min(p.horizontalScaleM || 12_000, 18_000) }
+        addVolume(tight)
+        return
+      }
       addVolume(p)
     })
 
@@ -327,8 +393,9 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   }
 
   return {
-    setPoints: (points) => {
-      cached = points
+    setField: (field) => {
+      cached = field.points
+      cachedTiles = field.tiles ?? []
       rebuild()
     },
     setVisible: (v) => {
