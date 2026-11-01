@@ -286,17 +286,22 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       setTracksLoading(false)
       return
     }
-    if (radarFrames.length < 2) return
+    // Display state holds only the current frame; fetch a short past window
+    // privately for heuristic track linking (not shown on the globe).
+    if (radarFrames.length === 0) return
 
     const controller = new AbortController()
     let cancelled = false
     setTracksLoading(true)
 
-    deriveTracksFromRadarFrames(radarFrames, australianWeatherProvider.id, {
-      frameLimit: 4,
-      signal: controller.signal,
-    })
-      .then((derived) => {
+    ;(async () => {
+      try {
+        const history = await australianWeatherProvider.getRadarHistory(4, controller.signal)
+        const derived = await deriveTracksFromRadarFrames(
+          history,
+          australianWeatherProvider.id,
+          { frameLimit: 4, signal: controller.signal },
+        )
         if (cancelled) return
         setDerivedTracks(derived)
         setAvailability((prev) => {
@@ -313,7 +318,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
                 provenance: {
                   kind: 'derived',
                   summary:
-                    'No multi-frame cell links found in the latest mosaics (or precip was too sparse).',
+                    'No multi-frame cell links found in recent mosaics (or precip was too sparse).',
                   sourceId: australianWeatherProvider.id,
                 },
               },
@@ -329,21 +334,20 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
               available: true,
               provenance: {
                 kind: 'derived',
-                summary: `Derived ${derived.length} heuristic cell track(s) from RainViewer mosaics.`,
+                summary: `Derived ${derived.length} heuristic cell track(s) from recent RainViewer mosaics (globe shows current frame only).`,
                 sourceId: australianWeatherProvider.id,
               },
             },
           ]
         })
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return
         console.warn('Cell track derivation failed', err)
         setDerivedTracks([])
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setTracksLoading(false)
-      })
+      }
+    })()
 
     return () => {
       cancelled = true

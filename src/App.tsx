@@ -970,7 +970,7 @@ export default function App() {
                 : 'Live Earth weather from the current RainViewer mosaic — processed imagery, not a BoM volume product. Sun lighting follows observation UTC when Follow sun is active.'
             }
             badge="Live observation"
-            frameCount={live.radarFrames.length}
+            frameCount={radarFrame ? 1 : 0}
             onRefreshLive={() => live.refresh()}
           />
         </>

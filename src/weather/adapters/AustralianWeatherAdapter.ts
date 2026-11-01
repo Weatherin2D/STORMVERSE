@@ -127,31 +127,56 @@ export class AustralianWeatherProvider implements WeatherProvider {
     }
   }
 
+  private toRadarObservation(
+    cat: RainViewerMapsResponse,
+    frame: { time: number; path: string },
+    summary: string,
+  ): RadarObservation {
+    return {
+      id: `rv-radar-${frame.time}`,
+      productType: 'radar_reflectivity',
+      sourceId: this.id,
+      observedAt: unixToIso(frame.time),
+      available: true,
+      coverage: { ...AUS_COVERAGE },
+      units: 'relative reflectivity (colour scale)',
+      tileUrlTemplate: rainViewerTileTemplate(cat.host, frame.path),
+      framePath: frame.path,
+      frameTimeUnix: frame.time,
+      provenance: {
+        kind: 'processed',
+        summary,
+        sourceId: this.id,
+        observedAt: unixToIso(frame.time),
+      },
+    }
+  }
+
+  /** Live display: only the most recent observed radar frame (no history / nowcast). */
   async getRadar(_query: WeatherQuery): Promise<RadarObservation[]> {
     try {
       const cat = await this.catalog()
-      const frames = [...cat.radar.past, ...cat.radar.nowcast]
-      return frames.map((frame, index) => ({
-        id: `rv-radar-${frame.time}`,
-        productType: 'radar_reflectivity' as const,
-        sourceId: this.id,
-        observedAt: unixToIso(frame.time),
-        available: true,
-        coverage: { ...AUS_COVERAGE },
-        units: 'relative reflectivity (colour scale)',
-        tileUrlTemplate: rainViewerTileTemplate(cat.host, frame.path),
-        framePath: frame.path,
-        frameTimeUnix: frame.time,
-        provenance: {
-          kind: 'processed' as const,
-          summary:
-            index >= cat.radar.past.length
-              ? `${RAINVIEWER.attribution}. Nowcast frame (extrapolated) — not a direct observation.`
-              : `${RAINVIEWER.attribution}. Past composite radar frame.`,
-          sourceId: this.id,
-          observedAt: unixToIso(frame.time),
-        },
-      }))
+      const latest = cat.radar.past[cat.radar.past.length - 1]
+      if (!latest) {
+        return [
+          {
+            ...unavailableMeta(
+              'aus-radar-reflectivity',
+              'radar_reflectivity',
+              this.id,
+              'No RainViewer radar frames in catalog.',
+            ),
+            productType: 'radar_reflectivity',
+          },
+        ]
+      }
+      return [
+        this.toRadarObservation(
+          cat,
+          latest,
+          `${RAINVIEWER.attribution}. Current composite radar frame (latest only).`,
+        ),
+      ]
     } catch {
       return [
         {
@@ -167,27 +192,67 @@ export class AustralianWeatherProvider implements WeatherProvider {
     }
   }
 
+  /**
+   * Recent past mosaics for heuristic track derivation only — not shown on the globe.
+   * Excludes nowcast (extrapolated) frames.
+   */
+  async getRadarHistory(
+    limit = 4,
+    signal?: AbortSignal,
+  ): Promise<RadarObservation[]> {
+    try {
+      const cat = await this.catalog(signal)
+      const past = cat.radar.past.slice(-Math.max(1, limit))
+      return past.map((frame) =>
+        this.toRadarObservation(
+          cat,
+          frame,
+          `${RAINVIEWER.attribution}. Past composite radar frame (track derivation only).`,
+        ),
+      )
+    } catch {
+      return []
+    }
+  }
+
+  /** Live display: only the most recent infrared frame when published. */
   async getSatellite(_query: WeatherQuery): Promise<SatelliteObservation[]> {
     try {
       const cat = await this.catalog()
-      return cat.satellite.infrared.map((frame) => ({
-        id: `rv-sat-ir-${frame.time}`,
-        productType: 'satellite_infrared' as const,
-        sourceId: this.id,
-        observedAt: unixToIso(frame.time),
-        available: true,
-        coverage: { ...AUS_COVERAGE },
-        band: 'infrared',
-        tileUrlTemplate: rainViewerTileTemplate(cat.host, frame.path),
-        framePath: frame.path,
-        frameTimeUnix: frame.time,
-        provenance: {
-          kind: 'processed' as const,
-          summary: `${RAINVIEWER.attribution}. Infrared satellite mosaic.`,
+      const latest = cat.satellite.infrared[cat.satellite.infrared.length - 1]
+      if (!latest) {
+        return [
+          {
+            ...unavailableMeta(
+              'aus-sat-infrared',
+              'satellite_infrared',
+              this.id,
+              'Infrared satellite frames are not currently published in the RainViewer catalog.',
+            ),
+            productType: 'satellite_infrared',
+          },
+        ]
+      }
+      return [
+        {
+          id: `rv-sat-ir-${latest.time}`,
+          productType: 'satellite_infrared',
           sourceId: this.id,
-          observedAt: unixToIso(frame.time),
+          observedAt: unixToIso(latest.time),
+          available: true,
+          coverage: { ...AUS_COVERAGE },
+          band: 'infrared',
+          tileUrlTemplate: rainViewerTileTemplate(cat.host, latest.path),
+          framePath: latest.path,
+          frameTimeUnix: latest.time,
+          provenance: {
+            kind: 'processed',
+            summary: `${RAINVIEWER.attribution}. Current infrared satellite mosaic (latest only).`,
+            sourceId: this.id,
+            observedAt: unixToIso(latest.time),
+          },
         },
-      }))
+      ]
     } catch {
       return [
         {

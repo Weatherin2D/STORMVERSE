@@ -28,7 +28,7 @@ export function TimelineBar({
           LIVE
         </span>
         <span className="mono live-frame-count">
-          {frameCount > 0 ? `latest of ${frameCount}` : 'waiting…'}
+          {frameCount > 0 ? 'current frame' : 'waiting…'}
         </span>
         <button type="button" onClick={onRefreshLive}>
           Refresh now
