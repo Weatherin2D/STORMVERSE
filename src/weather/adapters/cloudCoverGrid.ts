@@ -58,9 +58,10 @@ function buildGrid(
   return pts
 }
 
-/** Sparse global + denser Australia grid for Open-Meteo cloud-cover sampling. */
+/** Global + denser Australia grid for Open-Meteo cloud-cover sampling. */
 export function cloudCoverSampleLocations(): Array<{ lon: number; lat: number }> {
-  const global = buildGrid(-165, 165, -55, 55, 30)
+  // ~10° worldwide so model clouds appear on every continent/ocean basin.
+  const global = buildGrid(-170, 170, -60, 70, 10)
   const aus = buildGrid(112, 154, -44, -11, 4)
   const key = new Set<string>()
   const out: Array<{ lon: number; lat: number }> = []

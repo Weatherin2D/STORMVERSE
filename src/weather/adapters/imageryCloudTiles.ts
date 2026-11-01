@@ -48,13 +48,17 @@ function lonLatToTile(lon: number, lat: number, z: number) {
   return { x: ((x % n) + n) % n, y: Math.max(0, Math.min(n - 1, y)) }
 }
 
-/** Australia + near region tile indices at zoom z. */
-function tilesForAustralia(z: number): Array<{ x: number; y: number }> {
-  const sw = lonLatToTile(110, -45, z)
-  const ne = lonLatToTile(170, -8, z)
+/**
+ * Global WebMercator tile indices spanning nearly the whole Earth.
+ * Skips extreme polar rows where mercator stretching is useless for cloud sheets.
+ */
+function tilesForGlobe(z: number): Array<{ x: number; y: number }> {
+  const n = 2 ** z
+  const yMin = lonLatToTile(0, 72, z).y
+  const yMax = lonLatToTile(0, -72, z).y
   const out: Array<{ x: number; y: number }> = []
-  for (let y = Math.min(sw.y, ne.y); y <= Math.max(sw.y, ne.y); y++) {
-    for (let x = Math.min(sw.x, ne.x); x <= Math.max(sw.x, ne.x); x++) {
+  for (let y = Math.min(yMin, yMax); y <= Math.max(yMin, yMax); y++) {
+    for (let x = 0; x < n; x++) {
       out.push({ x, y })
     }
   }
@@ -85,6 +89,7 @@ async function fetchTileBitmap(
 function mosaicToCloudAlpha(
   bmp: ImageBitmap,
   mode: 'infrared' | 'radar',
+  fillStep: number,
 ): {
   canvas: HTMLCanvasElement
   mean: number
@@ -111,8 +116,6 @@ function mosaicToCloudAlpha(
   let max = 0
   let hit = 0
   const fill: Array<{ u: number; v: number; intens: number }> = []
-  // Dense pixel step so neighbouring billboards overlap into a continuous footprint.
-  const step = mode === 'radar' ? 1 : 2
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -133,21 +136,19 @@ function mosaicToCloudAlpha(
         hit++
         sum += intens
         max = Math.max(max, intens)
-        // Soft white cloud body; alpha tracks intensity so edges feather with the mosaic.
         const alpha = Math.min(255, Math.floor(40 + intens * 200))
         const shade = Math.floor(210 + intens * 45)
         img.data[i] = shade
         img.data[i + 1] = shade + 2
         img.data[i + 2] = Math.min(255, shade + 8)
         img.data[i + 3] = alpha
-        if (x % step === 0 && y % step === 0) {
+        if (x % fillStep === 0 && y % fillStep === 0) {
           fill.push({ u: x, v: y, intens })
         }
       }
     }
   }
   octx.putImageData(img, 0, 0)
-  // Slight blur so adjacent pixels merge into continuous cloud sheets
   octx.filter = 'blur(1.2px)'
   octx.drawImage(out, 0, 0)
   octx.filter = 'none'
@@ -191,9 +192,40 @@ function bandFromIntens(intens: number): {
   }
 }
 
+/** Keep fill geographically spread instead of only the strongest storms. */
+function diversifyFillPoints(points: CloudFieldPoint[], maxPoints: number): CloudFieldPoint[] {
+  if (points.length <= maxPoints) return points
+  // Bucket by ~5° cells so every region can contribute.
+  const buckets = new Map<string, CloudFieldPoint[]>()
+  for (const p of points) {
+    const key = `${Math.round(p.longitude / 5) * 5},${Math.round(p.latitude / 5) * 5}`
+    const list = buckets.get(key)
+    if (list) list.push(p)
+    else buckets.set(key, [p])
+  }
+  for (const list of buckets.values()) {
+    list.sort((a, b) => b.volumeStrength - a.volumeStrength)
+  }
+  const out: CloudFieldPoint[] = []
+  let round = 0
+  while (out.length < maxPoints) {
+    let added = 0
+    for (const list of buckets.values()) {
+      if (round < list.length) {
+        out.push(list[round])
+        added++
+        if (out.length >= maxPoints) break
+      }
+    }
+    if (added === 0) break
+    round++
+  }
+  return out
+}
+
 /**
- * Build shaped cloud tiles + dense fill from IR (preferred) or radar mosaics.
- * Cloud silhouette follows imagery alpha — not a sparse sphere lattice.
+ * Build shaped cloud tiles + dense fill from IR (preferred) or radar mosaics
+ * across the whole globe — not a regional subset.
  */
 export async function buildImageryCloudField(
   opts: {
@@ -209,34 +241,36 @@ export async function buildImageryCloudField(
   const template = frame?.tileUrlTemplate
   if (!frame || !template) return null
 
-  const z = mode === 'radar' ? 5 : 4
-  const tileIds = tilesForAustralia(z)
+  // z=3 ≈ 64 tiles worldwide (fast, Earth-wide). IR can afford z=4 for sharper sheets.
+  const z = mode === 'infrared' ? 4 : 3
+  const tileIds = tilesForGlobe(z)
+  const fillStep = mode === 'radar' ? 3 : 4
   const provenance: Provenance = {
     kind: mode === 'infrared' ? 'direct' : 'processed',
     summary:
       mode === 'infrared'
-        ? 'Cloud sheets shaped from RainViewer infrared mosaic footprint.'
-        : 'Cloud sheets shaped from RainViewer radar mosaic footprint (IR unpublished).',
-    sourceId: mode === 'infrared' ? 'rainviewer-ir-shaped' : 'rainviewer-radar-shaped',
+        ? 'Global cloud sheets shaped from RainViewer infrared mosaic footprint.'
+        : 'Global cloud sheets shaped from RainViewer radar mosaic footprint (IR unpublished).',
+    sourceId: mode === 'infrared' ? 'rainviewer-ir-shaped-global' : 'rainviewer-radar-shaped-global',
     observedAt: frame.observedAt,
     qualityNote:
-      'Silhouette follows mosaic alpha; height/thickness are brightness heuristics — not retrieved CTH.',
+      'Silhouette follows mosaic alpha worldwide; height/thickness are brightness heuristics — not retrieved CTH.',
   }
 
   const tiles: ImageryCloudTile[] = []
   const fillPoints: CloudFieldPoint[] = []
 
-  // Limit concurrency
   const queue = [...tileIds]
-  const workers = Array.from({ length: 6 }, async () => {
+  const workers = Array.from({ length: 10 }, async () => {
     while (queue.length) {
+      if (opts.signal?.aborted) return
       const id = queue.shift()
       if (!id) return
       const bmp = await fetchTileBitmap(template, z, id.x, id.y, opts.signal)
       if (!bmp) continue
-      const mapped = mosaicToCloudAlpha(bmp, mode)
+      const mapped = mosaicToCloudAlpha(bmp, mode, fillStep)
       bmp.close()
-      if (mapped.coverage < 0.008 || mapped.max < 0.15) continue
+      if (mapped.coverage < 0.004 || mapped.max < 0.12) continue
 
       const bounds = tileToLonLatBounds(z, id.x, id.y)
       const meta = bandFromIntens(mapped.mean || mapped.max)
@@ -257,17 +291,21 @@ export async function buildImageryCloudField(
         provenance,
       })
 
-      // Dense fill: only where mosaic has signal — spaced by pixel step so sprites merge into the shape
       const lonSpan = bounds.east - bounds.west
       const latSpan = bounds.north - bounds.south
-      for (const f of mapped.fill) {
-        if (f.intens < 0.14) continue
+      // Per-tile fill quota keeps every region represented on the globe.
+      const perTileCap = mode === 'infrared' ? 80 : 60
+      const ranked = mapped.fill
+        .filter((f) => f.intens >= 0.12)
+        .sort((a, b) => b.intens - a.intens)
+        .slice(0, perTileCap)
+      for (const f of ranked) {
         const lon = bounds.west + ((f.u + 0.5) / mapped.canvas.width) * lonSpan
         const lat = bounds.north - ((f.v + 0.5) / mapped.canvas.height) * latSpan
         const bm = bandFromIntens(f.intens)
-        // Pixel footprint in metres (approx) so neighbours overlap continuously
         const metrePerPix =
-          (lonSpan * 111_320 * Math.cos((lat * Math.PI) / 180)) / mapped.canvas.width
+          (lonSpan * 111_320 * Math.max(0.15, Math.cos((lat * Math.PI) / 180))) /
+          mapped.canvas.width
         fillPoints.push({
           longitude: lon,
           latitude: lat,
@@ -275,7 +313,8 @@ export async function buildImageryCloudField(
           cover: Math.min(1, f.intens),
           heightM: bm.heightM,
           thicknessM: bm.thicknessM,
-          horizontalScaleM: Math.max(2_200, metrePerPix * 4.0),
+          // Larger scale at coarse zoom so neighbours still merge into sheets
+          horizontalScaleM: Math.max(4_000, metrePerPix * fillStep * 1.6),
           volumeStrength: f.intens,
           typeProxy: bm.typeProxy,
           provenance,
@@ -288,9 +327,7 @@ export async function buildImageryCloudField(
   if (tiles.length === 0 && fillPoints.length === 0) return null
   return {
     tiles,
-    fillPoints: fillPoints
-      .sort((a, b) => b.volumeStrength - a.volumeStrength)
-      .slice(0, 5500),
+    fillPoints: diversifyFillPoints(fillPoints, 12_000),
     source: mode,
     observedAt: frame.observedAt,
   }

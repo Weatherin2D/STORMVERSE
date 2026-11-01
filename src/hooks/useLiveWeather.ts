@@ -215,28 +215,42 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
           ) ??
           null
 
-        const shaped = await buildImageryCloudField({
-          satellite: sat,
-          radar,
-          signal: controller.signal,
-        })
+        const [shaped, samples] = await Promise.all([
+          buildImageryCloudField({
+            satellite: sat,
+            radar,
+            signal: controller.signal,
+          }),
+          fetchCloudCoverGrid(controller.signal).catch(() => []),
+        ])
+        const modelPts = samplesToCloudFieldPoints(samples)
 
         if (shaped && (shaped.tiles.length > 0 || shaped.fillPoints.length > 0)) {
+          // Mosaic sheets are primary; Open-Meteo fills cloudy regions without
+          // mosaic signal (esp. when IR is unpublished and radar is precip-only).
+          const mosaicKeys = new Set(
+            shaped.fillPoints.map(
+              (p) => `${p.longitude.toFixed(0)},${p.latitude.toFixed(0)}`,
+            ),
+          )
+          const gapModel = modelPts.filter((p) => {
+            const k = `${p.longitude.toFixed(0)},${p.latitude.toFixed(0)}`
+            return !mosaicKeys.has(k) && p.cover >= 0.25
+          })
+          const merged = [...shaped.fillPoints, ...gapModel].slice(0, 14_000)
           if (cancelled) return
           setCloudTiles(shaped.tiles)
-          setCloudField(shaped.fillPoints)
+          setCloudField(merged)
           setCloudFieldSource(shaped.source)
           setCloudFieldLoading(false)
           setCloudFieldError(null)
           return
         }
 
-        // Fallback: Open-Meteo cloud-cover grid (no mosaic footprint available).
-        const samples = await fetchCloudCoverGrid(controller.signal)
-        const modelPts = samplesToCloudFieldPoints(samples)
+        // Fallback: Open-Meteo cloud-cover grid alone (no mosaic footprint available).
         if (cancelled) return
         setCloudTiles([])
-        setCloudField(modelPts.slice(0, 1000))
+        setCloudField(modelPts.slice(0, 4000))
         setCloudFieldSource(modelPts.length > 0 ? 'model' : null)
         setCloudFieldLoading(false)
         setCloudFieldError(

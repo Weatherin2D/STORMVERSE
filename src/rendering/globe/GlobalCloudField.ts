@@ -221,11 +221,12 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   }
 
   const addSheets = (tile: ImageryCloudTile, tileIndex: number) => {
-    const layers = immersive ? 5 : 4
+    // Fewer altitude layers when the globe is packed with tiles (perf).
+    const layers = cachedTiles.length > 80 ? (immersive ? 3 : 2) : immersive ? 5 : 4
     const span = Math.max(800, tile.topHeightM - tile.baseHeightM)
     const alpha = Math.min(0.78, 0.28 + tile.meanIntensity * 0.55)
     for (let L = 0; L < layers; L++) {
-      const t = L / (layers - 1)
+      const t = L / Math.max(1, layers - 1)
       const h = tile.baseHeightM + t * span
       const id = `cloud-sheet-${tile.z}-${tile.x}-${tile.y}-L${L}-${tileIndex}`
       viewer.entities.add({
@@ -301,9 +302,10 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
     }
 
     const shaped = cachedTiles.length > 0
-    // Mosaic-textured altitude sheets — silhouette matches imagery alpha exactly.
+    // Mosaic-textured altitude sheets for every tile with signal (Earth-wide).
     if (shaped) {
-      const maxTiles = immersive ? 48 : 36
+      const maxTiles = immersive ? 280 : 220
+      // Prefer stronger tiles first but keep nearly the full globe.
       cachedTiles
         .slice()
         .sort((a, b) => b.meanIntensity - a.meanIntensity)
@@ -311,16 +313,15 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
         .forEach((tile, i) => addSheets(tile, i))
     }
 
-    // Dense in-shape fill: many small overlapping puffs where mosaic has signal.
-    // Sparse model fallback: fewer, larger masses.
+    // Dense in-shape fill worldwide; model fallback stays sparser.
     const maxBillboardCells = shaped
       ? immersive
-        ? 2800
-        : 2000
+        ? 6500
+        : 5000
       : immersive
-        ? 520
-        : 360
-    const maxVolumes = shaped ? (immersive ? 36 : 22) : immersive ? 48 : 28
+        ? 900
+        : 700
+    const maxVolumes = shaped ? (immersive ? 48 : 32) : immersive ? 48 : 28
     const sorted = [...cached].sort(
       (a, b) => (b.volumeStrength || b.cover) - (a.volumeStrength || a.cover),
     )
@@ -338,8 +339,10 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
       const baseH = Math.max(600, p.heightM - p.thicknessM * 0.35)
       const thick = Math.max(2_000, p.thicknessM)
       const layers = shaped
-        ? Math.min(4, 2 + Math.floor(p.cover * 2.5))
-        : Math.min(10, 4 + Math.floor(p.cover * 6))
+        ? cells.length > 2500
+          ? Math.min(2, 1 + Math.floor(p.cover * 1.5))
+          : Math.min(3, 2 + Math.floor(p.cover * 1.5))
+        : Math.min(8, 3 + Math.floor(p.cover * 5))
       const [r, g, b] = BAND_RGB[p.band]
       const alpha = Math.min(0.9, 0.22 + p.cover * 0.55 + (immersive ? 0.08 : 0))
 

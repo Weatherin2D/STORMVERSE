@@ -226,7 +226,7 @@ export function InfoPanel({
               : cloudFieldError
                 ? cloudFieldError
                 : cloudTileCount > 0
-                  ? `${cloudTileCount} mosaic sheets + ${cloudFieldCount} in-shape fill (${cloudFieldSource ?? 'imagery'}; silhouette from tile alpha — height heuristics, not retrieved CTH)`
+                  ? `${cloudTileCount} global mosaic sheets + ${cloudFieldCount} fill (${cloudFieldSource ?? 'imagery'}; Earth-wide tile alpha — height heuristics, not retrieved CTH)`
                   : `${cloudFieldCount} model cloud masses (Open-Meteo cover — not retrieved CTH)`}
           </p>
           {error && <p className="provenance">{error}</p>}
