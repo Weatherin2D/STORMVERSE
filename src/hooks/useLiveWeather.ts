@@ -39,8 +39,10 @@ import {
 } from '../weather/caseStudy/parseCaseStudy'
 import {
   deleteCaseStudyFromShelf,
+  downloadCaseStudyShelfBackup,
   listCaseStudyShelf,
   loadCaseStudyFromShelf,
+  restoreCaseStudyShelfBackup,
   saveCaseStudyToShelf,
   type CaseStudyShelfListItem,
 } from '../weather/caseStudy/importShelf'
@@ -92,6 +94,11 @@ export interface LiveWeatherState {
   refreshCaseStudyShelf: () => void
   loadCaseStudyFromShelfId: (shelfId: string) => { ok: boolean; message: string }
   deleteCaseStudyShelfEntry: (shelfId: string) => { ok: boolean; message: string }
+  backupCaseStudyShelf: () => { ok: boolean; message: string }
+  restoreCaseStudyShelfText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
+  ) => { ok: boolean; message: string }
   clearCaseStudy: () => void
   refresh: () => void
 }
@@ -478,6 +485,22 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     [caseStudyShelf, refreshCaseStudyShelf, caseStudy, clearCaseStudy],
   )
 
+  const backupCaseStudyShelf = useCallback(() => {
+    return downloadCaseStudyShelfBackup()
+  }, [])
+
+  const restoreCaseStudyShelfText = useCallback(
+    (
+      text: string,
+      opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
+    ) => {
+      const result = restoreCaseStudyShelfBackup(text, opts)
+      refreshCaseStudyShelf()
+      return { ok: result.ok, message: result.message }
+    },
+    [refreshCaseStudyShelf],
+  )
+
   const loadLightningSample = useCallback(() => {
     setCaseStudy(null)
     lightningProvider.setUrl(sampleLightningUrl())
@@ -597,6 +620,8 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     refreshCaseStudyShelf,
     loadCaseStudyFromShelfId,
     deleteCaseStudyShelfEntry,
+    backupCaseStudyShelf,
+    restoreCaseStudyShelfText,
     clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
   }

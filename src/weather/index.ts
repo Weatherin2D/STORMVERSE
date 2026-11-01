@@ -76,6 +76,7 @@ export {
 } from './caseStudy/types'
 export {
   CASE_STUDY_SHELF_KEY,
+  CASE_STUDY_SHELF_BACKUP_VERSION,
   MAX_CASE_STUDY_SHELF,
   listCaseStudyShelf,
   loadCaseStudyFromShelf,
@@ -86,8 +87,15 @@ export {
   caseStudyPackToExportJson,
   downloadCaseStudyPack,
   downloadCaseStudyFromShelf,
+  buildCaseStudyShelfBackup,
+  caseStudyShelfBackupToJson,
+  downloadCaseStudyShelfBackup,
+  parseCaseStudyShelfBackupFromText,
+  restoreCaseStudyShelfBackup,
   type CaseStudyShelfEntry,
   type CaseStudyShelfListItem,
+  type CaseStudyShelfBackup,
+  type CaseStudyShelfRestoreAttestation,
 } from './caseStudy/importShelf'
 export {
   catalogPath,

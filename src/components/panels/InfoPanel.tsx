@@ -88,6 +88,11 @@ interface InfoPanelProps {
   onLoadCaseStudyById: (id: string) => void
   onLoadCaseStudyShelfId: (shelfId: string) => { ok: boolean; message: string }
   onDeleteCaseStudyShelfId: (shelfId: string) => { ok: boolean; message: string }
+  onBackupCaseStudyShelf: () => { ok: boolean; message: string }
+  onRestoreCaseStudyShelfText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
+  ) => { ok: boolean; message: string }
   onImportCaseStudyText: (
     text: string,
     opts: { licenceNote: string; sourceFilename?: string },
@@ -164,6 +169,8 @@ export function InfoPanel({
   onLoadCaseStudyById,
   onLoadCaseStudyShelfId,
   onDeleteCaseStudyShelfId,
+  onBackupCaseStudyShelf,
+  onRestoreCaseStudyShelfText,
   onImportCaseStudyText,
   onClearCaseStudy,
   canUseTracksAsTruth,
@@ -237,6 +244,8 @@ export function InfoPanel({
             onLoadById={onLoadCaseStudyById}
             onLoadShelfId={onLoadCaseStudyShelfId}
             onDeleteShelfId={onDeleteCaseStudyShelfId}
+            onBackupShelf={onBackupCaseStudyShelf}
+            onRestoreShelfText={onRestoreCaseStudyShelfText}
             onImportText={onImportCaseStudyText}
             onClear={onClearCaseStudy}
             onSyncModeChange={onLightningSyncModeChange}

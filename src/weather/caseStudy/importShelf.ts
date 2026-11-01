@@ -354,3 +354,261 @@ export function downloadCaseStudyFromShelf(
   }
   return result
 }
+
+export const CASE_STUDY_SHELF_BACKUP_VERSION = 1 as const
+
+export interface CaseStudyShelfBackup {
+  kind: 'stormverse.caseStudyShelfBackup'
+  version: typeof CASE_STUDY_SHELF_BACKUP_VERSION
+  exportedAt: string
+  /** Optional note from the exporter (not a rights attestation). */
+  note?: string
+  entries: Array<{
+    shelfId: string
+    savedAt: string
+    updatedAt: string
+    attestation: CaseStudyImportAttestation
+    document: unknown
+  }>
+}
+
+export interface CaseStudyShelfRestoreAttestation {
+  attestedAt: string
+  licenceNote: string
+  sourceFilename?: string
+  attestedByUser: true
+}
+
+export function buildCaseStudyShelfBackup(note?: string): CaseStudyShelfBackup {
+  const entries = readAll().map((e) => ({
+    shelfId: e.shelfId,
+    savedAt: e.savedAt,
+    updatedAt: e.updatedAt,
+    attestation: e.attestation,
+    document: e.document,
+  }))
+  return {
+    kind: 'stormverse.caseStudyShelfBackup',
+    version: CASE_STUDY_SHELF_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    note: note?.trim() ? note.trim().slice(0, 500) : undefined,
+    entries,
+  }
+}
+
+export function caseStudyShelfBackupToJson(backup: CaseStudyShelfBackup): string {
+  return `${JSON.stringify(backup, null, 2)}\n`
+}
+
+export function downloadCaseStudyShelfBackup(
+  filename = 'stormverse-case-study-shelf-backup.json',
+): { ok: boolean; message: string } {
+  const backup = buildCaseStudyShelfBackup()
+  if (backup.entries.length === 0) {
+    return { ok: false, message: 'Local shelf is empty — nothing to back up' }
+  }
+  try {
+    const blob = new Blob([caseStudyShelfBackupToJson(backup)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    return {
+      ok: true,
+      message: `Backed up ${backup.entries.length} shelved pack${backup.entries.length === 1 ? '' : 's'}`,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : 'Shelf backup failed',
+    }
+  }
+}
+
+function parseShelfBackup(raw: unknown): CaseStudyShelfBackup {
+  const o = asRecord(raw)
+  if (!o) throw new Error('Shelf backup is not a JSON object')
+  if (o.kind !== 'stormverse.caseStudyShelfBackup') {
+    throw new Error('Not a STORMVERSE case-study shelf backup')
+  }
+  if (o.version !== CASE_STUDY_SHELF_BACKUP_VERSION) {
+    throw new Error('Unsupported shelf backup version')
+  }
+  if (!Array.isArray(o.entries)) throw new Error('Shelf backup entries missing')
+  const entries: CaseStudyShelfBackup['entries'] = []
+  for (const item of o.entries) {
+    const hydrated = hydrateEntry(item)
+    if (!hydrated) {
+      throw new Error('Shelf backup contains an invalid or unattested entry')
+    }
+    entries.push({
+      shelfId: hydrated.shelfId,
+      savedAt: hydrated.savedAt,
+      updatedAt: hydrated.updatedAt,
+      attestation: hydrated.attestation,
+      document: hydrated.document,
+    })
+  }
+  return {
+    kind: 'stormverse.caseStudyShelfBackup',
+    version: CASE_STUDY_SHELF_BACKUP_VERSION,
+    exportedAt: typeof o.exportedAt === 'string' ? o.exportedAt : new Date(0).toISOString(),
+    note: typeof o.note === 'string' ? o.note : undefined,
+    entries,
+  }
+}
+
+export function parseCaseStudyShelfBackupFromText(text: string): CaseStudyShelfBackup {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    throw new Error('Shelf backup file is not valid JSON')
+  }
+  return parseShelfBackup(raw)
+}
+
+/**
+ * Restore a portable shelf backup. Requires a fresh restore attestation.
+ * Merges by pack id (upsert); caps at MAX_CASE_STUDY_SHELF.
+ */
+export function restoreCaseStudyShelfBackup(
+  text: string,
+  opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
+): { ok: boolean; message: string; restored: number; skipped: number } {
+  const licenceNote = opts.licenceNote.trim()
+  if (!licenceNote) {
+    return {
+      ok: false,
+      message: 'Licence / rights note is required to restore a shelf backup',
+      restored: 0,
+      skipped: 0,
+    }
+  }
+
+  let backup: CaseStudyShelfBackup
+  try {
+    backup = parseCaseStudyShelfBackupFromText(text)
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : 'Invalid shelf backup',
+      restored: 0,
+      skipped: 0,
+    }
+  }
+
+  if (backup.entries.length === 0) {
+    return { ok: false, message: 'Shelf backup has no entries', restored: 0, skipped: 0 }
+  }
+
+  const restoreAttestation: CaseStudyShelfRestoreAttestation = {
+    attestedAt: new Date().toISOString(),
+    licenceNote: licenceNote.slice(0, 500),
+    sourceFilename: opts.sourceFilename,
+    attestedByUser: true,
+  }
+
+  const incoming: CaseStudyShelfEntry[] = backup.entries.map((e) => {
+    // Stamp restore attestation into pack provenance via document merge when possible.
+    const doc = asRecord(e.document) ?? {}
+    const priorProv = asRecord(doc.provenance)
+    return {
+      shelfId: e.shelfId || newId(),
+      savedAt: e.savedAt,
+      updatedAt: new Date().toISOString(),
+      attestation: e.attestation,
+      document: {
+        ...doc,
+        importAttestation: e.attestation,
+        provenance: {
+          ...(priorProv ?? {}),
+          summary:
+            typeof priorProv?.summary === 'string'
+              ? `${priorProv.summary} Restored from shelf backup with user attestation.`
+              : 'Restored from shelf backup with user attestation.',
+          qualityNote: [
+            typeof priorProv?.qualityNote === 'string' ? priorProv.qualityNote : undefined,
+            `Original attestation: ${e.attestation.licenceNote}`,
+            `Restore attestation: ${restoreAttestation.licenceNote}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        },
+      },
+    }
+  })
+
+  // Re-validate after provenance stamp
+  const valid = incoming
+    .map((e) => hydrateEntry(e))
+    .filter((e): e is CaseStudyShelfEntry => e != null)
+
+  if (valid.length === 0) {
+    return {
+      ok: false,
+      message: 'No valid attested entries could be restored',
+      restored: 0,
+      skipped: backup.entries.length,
+    }
+  }
+
+  const existing = opts.replace ? [] : readAll()
+  const byPackId = new Map<string, CaseStudyShelfEntry>()
+  for (const e of existing) {
+    const pack = parseCaseStudyPack(e.document)
+    if (pack) byPackId.set(pack.id, e)
+  }
+
+  let restored = 0
+  let skipped = 0
+  for (const e of valid) {
+    const pack = parseCaseStudyPack(e.document)
+    if (!pack) {
+      skipped += 1
+      continue
+    }
+    const prior = byPackId.get(pack.id)
+    byPackId.set(pack.id, {
+      ...e,
+      shelfId: prior?.shelfId ?? e.shelfId ?? newId(),
+      savedAt: prior?.savedAt ?? e.savedAt,
+    })
+    restored += 1
+  }
+
+  const merged = Array.from(byPackId.values())
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, MAX_CASE_STUDY_SHELF)
+
+  const written = writeAll(merged)
+  if (!written.ok) {
+    return {
+      ok: false,
+      message: written.message ?? 'Failed to write restored shelf',
+      restored: 0,
+      skipped: backup.entries.length,
+    }
+  }
+
+  const dropped = Math.max(0, byPackId.size - merged.length)
+  const suffix = [
+    skipped ? `${skipped} skipped` : null,
+    dropped ? `${dropped} over shelf cap` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
+
+  return {
+    ok: true,
+    message: opts.replace
+      ? `Replaced shelf with ${restored} pack${restored === 1 ? '' : 's'} from backup`
+      : `Restored ${restored} pack${restored === 1 ? '' : 's'} into local shelf${suffix ? ` (${suffix})` : ''}`,
+    restored,
+    skipped: skipped + dropped,
+  }
+}

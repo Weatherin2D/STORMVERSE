@@ -778,6 +778,12 @@ button {
   white-space: nowrap;
 }
 
+.case-study-card .case-shelf-backup {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
 .case-study-card .case-import {
   margin: 12px 0 10px;
   padding-top: 8px;

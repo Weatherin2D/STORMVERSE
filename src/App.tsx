@@ -1071,6 +1071,16 @@ export default function App() {
               setState((s) => ({ ...s, statusMessage: result.message }))
               return result
             }}
+            onBackupCaseStudyShelf={() => {
+              const result = live.backupCaseStudyShelf()
+              setState((s) => ({ ...s, statusMessage: result.message }))
+              return result
+            }}
+            onRestoreCaseStudyShelfText={(text, opts) => {
+              const result = live.restoreCaseStudyShelfText(text, opts)
+              setState((s) => ({ ...s, statusMessage: result.message }))
+              return result
+            }}
             onImportCaseStudyText={(text, opts) => {
               const result = live.importCaseStudyText(text, opts)
               if (result.ok) {

@@ -26,6 +26,11 @@ interface CaseStudyCardProps {
   onLoadById: (id: string) => void
   onLoadShelfId: (shelfId: string) => { ok: boolean; message: string }
   onDeleteShelfId: (shelfId: string) => { ok: boolean; message: string }
+  onBackupShelf: () => { ok: boolean; message: string }
+  onRestoreShelfText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
+  ) => { ok: boolean; message: string }
   onImportText: (
     text: string,
     opts: { licenceNote: string; sourceFilename?: string },
@@ -51,17 +56,25 @@ export function CaseStudyCard({
   onLoadById,
   onLoadShelfId,
   onDeleteShelfId,
+  onBackupShelf,
+  onRestoreShelfText,
   onImportText,
   onClear,
   onSyncModeChange,
 }: CaseStudyCardProps) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const backupFileRef = useRef<HTMLInputElement>(null)
   const entries = catalog?.entries ?? []
   const [licenceNote, setLicenceNote] = useState('')
   const [attested, setAttested] = useState(false)
   const [importMessage, setImportMessage] = useState<string | null>(null)
+  const [restoreNote, setRestoreNote] = useState('')
+  const [restoreAttested, setRestoreAttested] = useState(false)
+  const [restoreReplace, setRestoreReplace] = useState(false)
 
   const canImport = attested && licenceNote.trim().length > 0 && !disabled && !loading
+  const canRestore =
+    restoreAttested && restoreNote.trim().length > 0 && !disabled && !loading
 
   return (
     <div className="availability case-study-card">
@@ -168,6 +181,89 @@ export function CaseStudyCard({
             })}
           </ul>
         )}
+
+        <div className="case-shelf-backup">
+          <p className="provenance">
+            Portable shelf backup moves attested packs between browsers/profiles as a JSON file —
+            not cloud sync. Restore requires a fresh rights attestation.
+          </p>
+          <div className="verify-actions">
+            <button
+              type="button"
+              disabled={disabled || shelf.length === 0}
+              onClick={() => setImportMessage(onBackupShelf().message)}
+            >
+              Backup shelf…
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!canRestore}
+              onClick={() => backupFileRef.current?.click()}
+            >
+              Restore backup…
+            </button>
+          </div>
+          <label className="case-import-note">
+            <span>Restore licence / rights note</span>
+            <input
+              type="text"
+              maxLength={500}
+              placeholder="e.g. Restoring my attested research packs to this browser…"
+              disabled={disabled}
+              value={restoreNote}
+              onChange={(e) => setRestoreNote(e.target.value)}
+            />
+          </label>
+          <label className="lightning-check case-attest">
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={restoreAttested}
+              onChange={(e) => setRestoreAttested(e.target.checked)}
+            />
+            <span>
+              I attest I have the rights to restore these packs here and that they were not obtained
+              by scraping restricted services.
+            </span>
+          </label>
+          <label className="lightning-check case-attest">
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={restoreReplace}
+              onChange={(e) => setRestoreReplace(e.target.checked)}
+            />
+            <span>Replace entire local shelf (otherwise merge / upsert by pack id)</span>
+          </label>
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              if (!restoreAttested || !restoreNote.trim()) {
+                setImportMessage('Restore attestation and licence note are required')
+                return
+              }
+              try {
+                const text = await file.text()
+                const result = onRestoreShelfText(text, {
+                  licenceNote: restoreNote,
+                  sourceFilename: file.name,
+                  replace: restoreReplace,
+                })
+                setImportMessage(result.message)
+                if (result.ok) setRestoreAttested(false)
+              } catch {
+                setImportMessage('Failed to read backup file')
+              }
+            }}
+          />
+        </div>
       </div>
 
       <div className="case-import">

@@ -41,7 +41,7 @@ Use **Export scene** / **Copy share link** / **Import scene** / **Save bookmark*
 
 ### Case-study import shelf
 
-Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShelf.v1`, max 12) and listed under **Local import shelf** in the case study library. Load, export, or remove them without re-uploading. Exports include attestation metadata. Device-local only.
+Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShelf.v1`, max 12) and listed under **Local import shelf** in the case study library. Load, export, or remove them without re-uploading. Exports include attestation metadata. Use **Backup shelf** / **Restore backup** to move packs between browsers or profiles (file-based; not cloud sync). Restore requires a fresh rights attestation.
 - Restore rematches cells by `stormId` against the live derived-track catalogue (radar is always re-fetched)
 
 ## Milestone status
@@ -128,11 +128,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Remove shelf entries; max 12 packs; clearing site data wipes the shelf
 - Still requires prior user attestation — no scraping or fabricated archives
 
-### 19 — Attested pack export (current)
+### 19 — Attested pack export
 - Export shelved or loaded attested packs as STORMVERSE JSON
 - `importAttestation` (licence note, timestamp, source filename) preserved in the file
 - Catalog/example fixtures without attestation cannot use the attested export path
 - Re-import still requires a fresh rights attestation in the UI
+
+### 20 — Portable shelf backup / restore (current)
+- Download the whole local import shelf as a STORMVERSE backup JSON
+- Restore into another browser/profile (merge by pack id, or replace shelf)
+- Restore gated by a fresh rights attestation + licence note
+- Still file-based and device-local — not cloud sync; no scraping
 
 ## Scientific integrity
 
@@ -164,13 +170,14 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Schematic RHI colour bands are not calibrated dBZ
 - User import attestation is self-declared — STORMVERSE cannot verify third-party licences
 - Import shelf is device-local (not synced); clearing site data removes shelved packs
+- Shelf backups are portable files, not an account sync service
 - Tracks empty when Australia mosaics lack precip (unless a case study is loaded)
 
 ## Next ideas
 
 1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
 2. Licensed radar volume / true RHI products under proper licensing
-3. Optional shelf sync / backup beyond a single browser profile
+3. Optional combined scene-bookmark + shelf workspace export
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
