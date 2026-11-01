@@ -43,6 +43,16 @@ export {
   type LightningQualitySummary,
 } from './reconstruction/lightningQuality'
 export {
+  buildCrossProductReport,
+  lightningInObservationWindow,
+  lightningNearTrack,
+  DEFAULT_CROSS_PRODUCT_TIME_WINDOW_SEC,
+  DEFAULT_CROSS_PRODUCT_NEAR_TRACK_KM,
+  type CrossProductReport,
+  type CrossProductFeedStatus,
+  type CrossProductInputs,
+} from './reconstruction/crossProductQuality'
+export {
   GeoJsonTruthCellsProvider,
   createTruthCellsProviderFromEnv,
   sampleTruthCellsUrl,

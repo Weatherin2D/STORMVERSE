@@ -81,11 +81,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Load bundled sample / export current tracks as a stand-in template
 - Association scores are geometric gates — not published verification skill
 
-### 12 — Lightning quality metadata (current)
+### 12 — Lightning quality metadata
 - Parse `qualityScore` / network / polarity / multiplicity / location error from GeoJSON
 - Local min-quality + classification filters for globe markers
 - Load bundled sample feed; markers tint by classification/quality
 - Filters never invent detections — licensed URL still required for live networks
+
+### 13 — Cross-product quality dashboard (current)
+- Unified radar / tracks / lightning / truth readiness panel
+- Exploratory coherence hint from time + distance gates (not verification skill)
+- Optional sync of globe lightning to the active radar observation window
+- Missing feeds stay gaps — never filled with fabricated observations
 
 ## Scientific integrity
 
@@ -95,6 +101,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Cell tracks | Derived heuristic (low confidence) |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
 | Track–truth association | Optional gated match to user catalogue — not BoM skill |
+| Cross-product coherence | Exploratory readiness / co-location hint — not multi-sensor skill |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
 | Globe volume / compare set | **Procedural**, georegistered |
@@ -108,7 +115,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - No bundled live lightning network (configure your own licensed URL)
 - Snapshots and bookmarks cannot guarantee the same cells exist after catalogue refresh
 - Bookmarks are device-local (not synced); clearing site data removes them
-- Track “skill” and truth-association scores are not formal verification products
+- Track “skill”, truth-association, and cross-product scores are not formal verification products
 - Sample lightning / truth cells are plumbing fixtures — replace with licensed catalogues
 - Tracks empty when Australia mosaics lack precip
 
@@ -116,7 +123,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 
 1. Wire lightning + truth hooks to licensed commercial/BoM products when available
 2. Radar volume / RHI products under proper licensing
-3. Cross-product quality dashboards (radar ↔ lightning ↔ tracks)
+3. Time-aligned multi-sensor case studies with licensed archives
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

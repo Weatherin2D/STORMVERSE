@@ -22,10 +22,13 @@ import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
 import {
+  DEFAULT_CROSS_PRODUCT_TIME_WINDOW_SEC,
   DEFAULT_LIGHTNING_FILTER,
+  buildCrossProductReport,
   downloadTruthCellsTemplate,
   filterLightningEvents,
   interpolateTrackAtCursor,
+  lightningInObservationWindow,
   mapEnvironmentToReconstruction,
   prototypeProvider,
   summarizeLightningQuality,
@@ -84,14 +87,62 @@ export default function App() {
   const [lightningFilter, setLightningFilter] = useState<LightningQualityFilter>(
     () => ({ ...DEFAULT_LIGHTNING_FILTER }),
   )
+  const [syncLightningToRadarTime, setSyncLightningToRadarTime] = useState(false)
 
-  const filteredLightningEvents = useMemo(
+  const qualityFilteredLightning = useMemo(
     () => filterLightningEvents(live.lightningEvents, lightningFilter),
     [live.lightningEvents, lightningFilter],
   )
+
+  const radarObservedAt = useMemo(() => {
+    if (live.radarFrames.length === 0) return null
+    const idx = Math.min(
+      live.radarFrames.length - 1,
+      Math.max(0, Math.round(state.timeline.cursor)),
+    )
+    return live.radarFrames[idx]?.observedAt ?? null
+  }, [live.radarFrames, state.timeline.cursor])
+
+  const filteredLightningEvents = useMemo(() => {
+    if (!syncLightningToRadarTime) return qualityFilteredLightning
+    return lightningInObservationWindow(
+      qualityFilteredLightning,
+      radarObservedAt,
+      DEFAULT_CROSS_PRODUCT_TIME_WINDOW_SEC,
+    )
+  }, [syncLightningToRadarTime, qualityFilteredLightning, radarObservedAt])
+
   const lightningQualitySummary = useMemo(
-    () => summarizeLightningQuality(live.lightningEvents, filteredLightningEvents),
-    [live.lightningEvents, filteredLightningEvents],
+    () => summarizeLightningQuality(live.lightningEvents, qualityFilteredLightning),
+    [live.lightningEvents, qualityFilteredLightning],
+  )
+
+  const crossProductReport = useMemo(
+    () =>
+      buildCrossProductReport({
+        radarObservedAt,
+        radarFrameCount: live.radarFrames.length,
+        tracks: live.tracks,
+        trackSkillSummary: live.trackSkillSummary,
+        truthSummary: live.trackTruthSummary,
+        lightningConfigured: live.lightningConfigured,
+        lightningAll: live.lightningEvents,
+        lightningVisible: filteredLightningEvents,
+        lightningSummary: lightningQualitySummary,
+        selectedTrackId,
+      }),
+    [
+      radarObservedAt,
+      live.radarFrames.length,
+      live.tracks,
+      live.trackSkillSummary,
+      live.trackTruthSummary,
+      live.lightningConfigured,
+      live.lightningEvents,
+      filteredLightningEvents,
+      lightningQualitySummary,
+      selectedTrackId,
+    ],
   )
 
   useEffect(() => {
@@ -907,6 +958,8 @@ export default function App() {
             lightningEvents={live.lightningEvents}
             lightningFilter={lightningFilter}
             lightningSummary={lightningQualitySummary}
+            crossProductReport={crossProductReport}
+            syncLightningToRadarTime={syncLightningToRadarTime}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             loading={live.loading}
@@ -936,6 +989,15 @@ export default function App() {
               setState((s) => ({
                 ...s,
                 statusMessage: 'Lightning feed cleared',
+              }))
+            }}
+            onSyncLightningToRadarTime={(enabled) => {
+              setSyncLightningToRadarTime(enabled)
+              setState((s) => ({
+                ...s,
+                statusMessage: enabled
+                  ? 'Globe lightning synced to radar observation time window'
+                  : 'Globe lightning time sync off',
               }))
             }}
             canUseTracksAsTruth={live.tracks.length > 0}

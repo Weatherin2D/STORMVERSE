@@ -2,6 +2,7 @@ import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
+  CrossProductReport,
   LightningObservation,
   LightningQualityFilter,
   LightningQualitySummary,
@@ -19,6 +20,7 @@ import { CrossSection } from '../scientific/CrossSection'
 import { TrackSkillCard } from '../scientific/TrackSkillCard'
 import { TrackVerificationCard } from '../scientific/TrackVerificationCard'
 import { LightningQualityCard } from '../scientific/LightningQualityCard'
+import { CrossProductQualityCard } from '../scientific/CrossProductQualityCard'
 import { SceneBookmarkGallery } from '../controls/SceneBookmarkGallery'
 
 interface InfoPanelProps {
@@ -50,6 +52,8 @@ interface InfoPanelProps {
   lightningEvents: LightningObservation[]
   lightningFilter: LightningQualityFilter
   lightningSummary: LightningQualitySummary | null
+  crossProductReport: CrossProductReport | null
+  syncLightningToRadarTime: boolean
   loading: boolean
   error: string | null
   onClose: () => void
@@ -67,6 +71,7 @@ interface InfoPanelProps {
   onLightningFilterChange: (next: LightningQualityFilter) => void
   onLoadLightningSample: () => void
   onClearLightningFeed: () => void
+  onSyncLightningToRadarTime: (enabled: boolean) => void
   canUseTracksAsTruth: boolean
   onLoadTruthSample: () => void
   onUseTracksAsTruth: () => void
@@ -108,6 +113,8 @@ export function InfoPanel({
   lightningEvents,
   lightningFilter,
   lightningSummary,
+  crossProductReport,
+  syncLightningToRadarTime,
   loading,
   error,
   volumePinned,
@@ -125,6 +132,7 @@ export function InfoPanel({
   onLightningFilterChange,
   onLoadLightningSample,
   onClearLightningFeed,
+  onSyncLightningToRadarTime,
   canUseTracksAsTruth,
   onLoadTruthSample,
   onUseTracksAsTruth,
@@ -182,6 +190,13 @@ export function InfoPanel({
               ))}
             </ul>
           </div>
+
+          <CrossProductQualityCard
+            report={crossProductReport}
+            syncLightningToRadarTime={syncLightningToRadarTime}
+            disabled={loading}
+            onSyncChange={onSyncLightningToRadarTime}
+          />
 
           <div className="availability">
             <LightningQualityCard
