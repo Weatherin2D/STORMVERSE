@@ -1,5 +1,5 @@
 import type { LayerState, TimelineState, ViewMode } from './appState'
-import type { LightingMode } from '../rendering/atmosphere/lighting'
+import type { LightingMode } from './lightingMode'
 
 export const SCENE_SNAPSHOT_VERSION = 1 as const
 export const SCENE_HASH_PREFIX = 'scene='
@@ -13,16 +13,16 @@ export interface SceneSnapshot {
   layers: Partial<LayerState>
   timeline: {
     playing: boolean
-    /** Prefer matching this observation time when restoring globe mode. */
+    /** Prefer matching this observation time when restoring. */
     observedAt?: string
-    /** Fallback fractional cursor 0…1 across available frames / sim window. */
+    /** Fallback fractional cursor 0…1 across available frames. */
     cursorNorm: number
     speed: number
   }
   exploration: {
     selectedStormId: string | null
     compareStormIds: string[]
-    pinnedVolumeMode: 'prototype' | 'cell' | null
+    pinnedVolumeMode: 'cell' | null
     followTrack: boolean
     chaseVolume: boolean
     panelOpen: boolean
@@ -46,7 +46,7 @@ export interface SceneSnapshotSource {
   panelOpen: boolean
   selectedStormId: string | null
   compareStormIds: string[]
-  pinnedVolumeMode: 'prototype' | 'cell' | null
+  pinnedVolumeMode: 'cell' | null
   followTrack: boolean
   chaseVolume: boolean
   observedAt?: string | null
@@ -57,13 +57,35 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
+function normalizeViewMode(raw: unknown): ViewMode {
+  if (raw === 'immersive' || raw === 'storm') return 'immersive'
+  return 'globe'
+}
+
+function normalizeLighting(raw: unknown): LightingMode {
+  if (
+    raw === 'followSun' ||
+    raw === 'day' ||
+    raw === 'sunrise' ||
+    raw === 'sunset' ||
+    raw === 'night'
+  ) {
+    return raw
+  }
+  return 'followSun'
+}
+
+function normalizePinned(raw: unknown): 'cell' | null {
+  return raw === 'cell' ? 'cell' : null
+}
+
 export function buildSceneSnapshot(source: SceneSnapshotSource): SceneSnapshot {
   const max = Math.max(1e-6, source.timeline.max)
   return {
     version: SCENE_SNAPSHOT_VERSION,
     exportedAt: new Date().toISOString(),
     app: 'stormverse',
-    viewMode: source.viewMode === 'storm' ? 'storm' : 'globe',
+    viewMode: source.viewMode === 'immersive' ? 'immersive' : 'globe',
     lightingMode: source.lightingMode,
     layers: { ...source.layers },
     timeline: {
@@ -75,7 +97,7 @@ export function buildSceneSnapshot(source: SceneSnapshotSource): SceneSnapshot {
     exploration: {
       selectedStormId: source.selectedStormId,
       compareStormIds: source.compareStormIds.slice(0, 8),
-      pinnedVolumeMode: source.pinnedVolumeMode,
+      pinnedVolumeMode: source.pinnedVolumeMode === 'cell' ? 'cell' : null,
       followTrack: source.followTrack,
       chaseVolume: source.chaseVolume,
       panelOpen: source.panelOpen,
@@ -83,7 +105,7 @@ export function buildSceneSnapshot(source: SceneSnapshotSource): SceneSnapshot {
     },
     camera: source.camera,
     note:
-      'STORMVERSE scene snapshot. Live radar/tracks are re-fetched on restore; cell ids match by stormId when present.',
+      'STORMVERSE scene snapshot. Live radar/tracks/cloud field are re-fetched on restore; cell ids match by stormId when present.',
   }
 }
 
@@ -92,12 +114,21 @@ export function parseSceneSnapshot(raw: unknown): SceneSnapshot | null {
   const o = raw as Record<string, unknown>
   if (o.app !== 'stormverse') return null
   if (o.version !== 1) return null
-  if (o.viewMode !== 'globe' && o.viewMode !== 'storm') return null
+  if (o.viewMode !== 'globe' && o.viewMode !== 'storm' && o.viewMode !== 'immersive') return null
   const exploration = o.exploration
   if (!exploration || typeof exploration !== 'object') return null
   const timeline = o.timeline
   if (!timeline || typeof timeline !== 'object') return null
-  return o as unknown as SceneSnapshot
+  const exp = exploration as Record<string, unknown>
+  return {
+    ...(o as unknown as SceneSnapshot),
+    viewMode: normalizeViewMode(o.viewMode),
+    lightingMode: normalizeLighting(o.lightingMode),
+    exploration: {
+      ...(exp as SceneSnapshot['exploration']),
+      pinnedVolumeMode: normalizePinned(exp.pinnedVolumeMode),
+    },
+  }
 }
 
 export function snapshotToJson(snapshot: SceneSnapshot): string {
@@ -112,41 +143,25 @@ export function snapshotFromJson(text: string): SceneSnapshot | null {
   }
 }
 
-function toBase64Url(json: string): string {
-  const bytes = new TextEncoder().encode(json)
-  let bin = ''
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-
-function fromBase64Url(encoded: string): string | null {
-  try {
-    const padded = encoded.replace(/-/g, '+').replace(/_/g, '/')
-    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
-    const bin = atob(padded + pad)
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-    return new TextDecoder().decode(bytes)
-  } catch {
-    return null
-  }
-}
-
 export function encodeSceneHash(snapshot: SceneSnapshot): string {
-  const compact = JSON.stringify(snapshot)
-  return `#${SCENE_HASH_PREFIX}${toBase64Url(compact)}`
+  const json = JSON.stringify(snapshot)
+  const b64 = btoa(unescape(encodeURIComponent(json)))
+  return `#${SCENE_HASH_PREFIX}${b64}`
 }
 
 export function decodeSceneHash(hash: string): SceneSnapshot | null {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash
   if (!raw.startsWith(SCENE_HASH_PREFIX)) return null
-  const encoded = raw.slice(SCENE_HASH_PREFIX.length)
-  const json = fromBase64Url(encoded)
-  if (!json) return null
-  return snapshotFromJson(json)
+  try {
+    const b64 = raw.slice(SCENE_HASH_PREFIX.length)
+    const json = decodeURIComponent(escape(atob(b64)))
+    return parseSceneSnapshot(JSON.parse(json))
+  } catch {
+    return null
+  }
 }
 
-export function buildShareUrl(snapshot: SceneSnapshot, location = window.location): string {
+export function buildShareUrl(snapshot: SceneSnapshot): string {
   const url = new URL(location.href)
   url.hash = encodeSceneHash(snapshot).slice(1)
   return url.toString()
@@ -168,14 +183,11 @@ export function resolveTimelineCursor(
   snapshot: SceneSnapshot,
   opts: { frameCount: number; observedAts: string[]; stormDurationSec: number },
 ): number {
-  if (snapshot.viewMode === 'storm') {
-    return clamp01(snapshot.timeline.cursorNorm) * Math.max(1, opts.stormDurationSec)
-  }
+  void opts.stormDurationSec
   const max = Math.max(0, opts.frameCount - 1)
   if (snapshot.timeline.observedAt && opts.observedAts.length > 0) {
     const idx = opts.observedAts.findIndex((t) => t === snapshot.timeline.observedAt)
     if (idx >= 0) return idx
-    // nearest by time
     const target = Date.parse(snapshot.timeline.observedAt)
     if (Number.isFinite(target)) {
       let best = 0

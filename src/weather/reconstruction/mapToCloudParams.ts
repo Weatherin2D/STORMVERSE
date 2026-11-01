@@ -1,5 +1,5 @@
-import { CLOUD_DEFAULTS } from '../../config/app'
-import type { CloudParams } from '../../rendering/clouds/CloudVolume'
+import { CLOUD_DEFAULTS, DEFAULT_FOCUS } from '../../config/app'
+import type { CloudParams } from '../../rendering/clouds/types'
 import type { StormTrack } from '../types/observations'
 import type { EnvironmentalProfile } from '../adapters/OpenMeteoAdapter'
 import type { Provenance } from '../types/provenance'
@@ -62,15 +62,15 @@ export function mapEnvironmentToReconstruction(
     seed: track ? hashId(track.id) : CLOUD_DEFAULTS.seed,
   }
 
-  const lon = pose?.longitude ?? head?.longitude ?? 149.12
-  const lat = pose?.latitude ?? head?.latitude ?? -32.45
+  const lon = pose?.longitude ?? head?.longitude ?? DEFAULT_FOCUS.envLongitude
+  const lat = pose?.latitude ?? head?.latitude ?? DEFAULT_FOCUS.envLatitude
   const animated = Boolean(pose)
 
   return {
-    id: track?.id ?? 'prototype',
+    id: track?.id ?? 'focus-reconstruction',
     longitude: lon,
     latitude: lat,
-    label: track ? `${track.stormId} reconstruction` : 'Prototype reconstruction',
+    label: track ? `${track.stormId} reconstruction` : 'Focus reconstruction',
     cloudParams,
     flashFreq: clamp01(0.2 + intensity * 0.55),
     primary: true,

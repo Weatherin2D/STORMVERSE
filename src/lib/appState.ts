@@ -1,9 +1,7 @@
-import type { CloudParams } from '../rendering/clouds/CloudVolume'
-import type { LightingMode } from '../rendering/atmosphere/lighting'
-import type { StormCameraPreset } from '../rendering/storm/StormControls'
-import { CLOUD_DEFAULTS, TIMELINE } from '../config/app'
+import type { LightingMode } from './lightingMode'
+import { TIMELINE } from '../config/app'
 
-export type ViewMode = 'globe' | 'storm'
+export type ViewMode = 'globe' | 'immersive'
 
 export interface LayerState {
   clouds: boolean
@@ -23,13 +21,10 @@ export interface LayerState {
 
 export interface TimelineState {
   playing: boolean
-  /**
-   * Globe mode: index into radar/satellite frame list (fractional while playing).
-   * Storm mode: seconds into the prototype simulation window.
-   */
+  /** Index into radar/satellite frame list (fractional while playing). */
   cursor: number
   speed: number
-  /** Globe: frame count - 1; Storm: duration seconds. */
+  /** Frame count - 1. */
   max: number
 }
 
@@ -37,20 +32,17 @@ export interface AppState {
   viewMode: ViewMode
   lightingMode: LightingMode
   layers: LayerState
-  cloudParams: CloudParams
-  flashFreq: number
   timeline: TimelineState
   panelOpen: boolean
   debugOpen: boolean
   reducedFlash: boolean
-  cameraPreset: StormCameraPreset
   statusMessage: string
 }
 
 export function createInitialAppState(reducedMotion: boolean): AppState {
   return {
     viewMode: 'globe',
-    lightingMode: 'day',
+    lightingMode: 'followSun',
     layers: {
       clouds: true,
       lightning: true,
@@ -61,18 +53,15 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       lightningObs: true,
       volume: true,
     },
-    cloudParams: { ...CLOUD_DEFAULTS },
-    flashFreq: 0.35,
     timeline: {
       playing: true,
       cursor: 0,
       speed: TIMELINE.defaultSpeed,
-      max: TIMELINE.durationSec,
+      max: 0,
     },
     panelOpen: true,
     debugOpen: false,
     reducedFlash: reducedMotion,
-    cameraPreset: 'overview',
     statusMessage: 'Loading Australian radar observations…',
   }
 }

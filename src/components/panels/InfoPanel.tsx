@@ -1,4 +1,4 @@
-import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
+import { APP_NAME, DEFAULT_FOCUS } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
@@ -72,15 +72,17 @@ interface InfoPanelProps {
   onClose: () => void
   volumePinned: boolean
   followTrack: boolean
-  onEnterStorm: () => void
+  onEnterImmersive: () => void
   onPinSelectedCell: () => void
-  onEnterSelectedCell: () => void
   onFollowTrack: (v: boolean) => void
   onCompareTop: () => void
   onClearCompare: () => void
   onRemoveCompare: (trackId: string) => void
-  onReturnGlobe: () => void
+  onExitImmersive: () => void
   onSelectTrack: (trackId: string) => void
+  cloudFieldCount: number
+  cloudFieldLoading: boolean
+  cloudFieldError: string | null
   onLightningFilterChange: (next: LightningQualityFilter) => void
   onLoadLightningSample: () => void
   onClearLightningFeed: () => void
@@ -153,15 +155,17 @@ export function InfoPanel({
   volumePinned,
   followTrack,
   onClose,
-  onEnterStorm,
+  onEnterImmersive,
   onPinSelectedCell,
-  onEnterSelectedCell,
   onFollowTrack,
   onCompareTop,
   onClearCompare,
   onRemoveCompare,
-  onReturnGlobe,
+  onExitImmersive,
   onSelectTrack,
+  cloudFieldCount,
+  cloudFieldLoading,
+  cloudFieldError,
   onLightningFilterChange,
   onLoadLightningSample,
   onClearLightningFeed,
@@ -194,11 +198,7 @@ export function InfoPanel({
       <header>
         <div>
           <p className="eyebrow">{APP_NAME}</p>
-          <h2>
-            {viewMode === 'storm'
-              ? reconstruction?.label ?? PROTOTYPE_STORM.name
-              : 'Earth exploration'}
-          </h2>
+          <h2>{viewMode === 'immersive' ? 'Immersive atmosphere' : 'Earth exploration'}</h2>
         </div>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close panel">
           Close
@@ -208,12 +208,20 @@ export function InfoPanel({
       {viewMode === 'globe' ? (
         <div className="panel-body">
           <p>
-            Pin cells onto the globe, or use <strong>Compare cells</strong> to place up to four
-            accent-coloured procedural volumes side by side. <strong>Follow track</strong> walks
-            them with observation time; the selected cell is the primary (ray-marched) volume.
+            Explore the Cesium globe with a global model cloud-cover field, RainViewer radar /
+            rain shafts, and optional GeoJSON lightning. <strong>Enter immersive</strong> flies
+            into the atmospheric shell. Pin or compare derived cell volumes as procedural aids.
           </p>
           <p className="provenance">
             <strong>Active radar frame:</strong> {radarLabel ?? (loading ? 'Loading…' : 'Unavailable')}
+          </p>
+          <p className="provenance">
+            <strong>Cloud field:</strong>{' '}
+            {cloudFieldLoading
+              ? 'Loading Open-Meteo cloud-cover grid…'
+              : cloudFieldError
+                ? cloudFieldError
+                : `${cloudFieldCount} band samples (low/mid/high type proxies — not WMO types)`}
           </p>
           {error && <p className="provenance">{error}</p>}
 
@@ -491,7 +499,7 @@ export function InfoPanel({
                 >
                   Follow track
                 </button>
-                <button type="button" onClick={onEnterSelectedCell}>
+                <button type="button" onClick={onEnterImmersive}>
                   Enter immersive
                 </button>
               </div>
@@ -500,7 +508,7 @@ export function InfoPanel({
 
           {environment && (
             <div className="availability">
-              <h3>Environment at prototype site</h3>
+              <h3>Environment at focus site</h3>
               {environment.available ? (
                 <dl className="meta-grid">
                   <div>
@@ -545,38 +553,40 @@ export function InfoPanel({
           <p className="provenance">
             <strong>Provider:</strong> {australianWeatherProvider.displayName}
           </p>
-          <button type="button" onClick={onEnterStorm}>
-            Enter prototype storm
+          <button type="button" className="primary" onClick={onEnterImmersive}>
+            Enter immersive atmosphere
           </button>
         </div>
       ) : (
         <div className="panel-body">
           <p>
-            {reconstruction?.provenance.summary ?? PROTOTYPE_STORM.description}
+            Fly through a globe-scale atmosphere driven by Open-Meteo cloud-cover bands (type
+            proxies), RainViewer IR/radar, derived rain shafts, and direct GeoJSON lightning only —
+            never synthetic bolts.
           </p>
           <dl className="meta-grid">
             <div>
               <dt>Focus</dt>
               <dd>
-                {(reconstruction?.latitude ?? PROTOTYPE_STORM.latitude).toFixed(2)}°,{' '}
-                {(reconstruction?.longitude ?? PROTOTYPE_STORM.longitude).toFixed(2)}°
+                {(reconstruction?.latitude ?? DEFAULT_FOCUS.envLatitude).toFixed(2)}°,{' '}
+                {(reconstruction?.longitude ?? DEFAULT_FOCUS.envLongitude).toFixed(2)}°
               </dd>
             </div>
             <div>
-              <dt>Provenance</dt>
-              <dd>{reconstruction?.provenance.kind ?? 'synthetic'} reconstruction</dd>
+              <dt>Cloud field</dt>
+              <dd>{cloudFieldLoading ? 'Loading…' : `${cloudFieldCount} samples`}</dd>
             </div>
             <div>
-              <dt>Lightning FX</dt>
-              <dd>Synthetic demonstration in 3D scene</dd>
-            </div>
-            <div>
-              <dt>Globe lightning</dt>
+              <dt>Lightning</dt>
               <dd>
                 {lightningConfigured
-                  ? `${lightningVisibleCount}/${lightningCount} visible`
-                  : 'Feed not configured'}
+                  ? `${lightningVisibleCount}/${lightningCount} visible (direct feed)`
+                  : 'Feed not configured — no invented strokes'}
               </dd>
+            </div>
+            <div>
+              <dt>Lighting</dt>
+              <dd>Astronomical sun from observation UTC (or labelled preview)</dd>
             </div>
           </dl>
           <CrossSection
@@ -589,8 +599,8 @@ export function InfoPanel({
             environment={environment}
             lightning={lightningEvents}
           />
-          <button type="button" onClick={onReturnGlobe}>
-            Return to Earth
+          <button type="button" onClick={onExitImmersive}>
+            Exit immersive
           </button>
         </div>
       )}

@@ -142,5 +142,5 @@ export function defaultBookmarkName(snapshot: SceneSnapshot): string {
   if (snapshot.timeline.observedAt) {
     return `Radar ${snapshot.timeline.observedAt.replace('T', ' ').slice(0, 16)}Z`
   }
-  return snapshot.viewMode === 'storm' ? 'Immersive storm' : 'Earth exploration'
+  return snapshot.viewMode === 'immersive' ? 'Immersive atmosphere' : 'Earth exploration'
 }

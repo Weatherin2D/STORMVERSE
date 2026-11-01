@@ -16,7 +16,7 @@ import {
   VerticalOrigin,
   type Viewer,
 } from 'cesium'
-import type { CloudParams } from '../clouds/CloudVolume'
+import type { CloudParams } from '../clouds/types'
 import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
 
 const BASE_HEIGHT = 900

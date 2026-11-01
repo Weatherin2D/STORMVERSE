@@ -4,11 +4,9 @@ import {
   Cartographic,
   Color,
   Credit,
-  HeightReference,
   ImageryLayer,
   Ion,
   IonImageryProvider,
-  LabelStyle,
   Math as CesiumMath,
   OpenStreetMapImageryProvider,
   ScreenSpaceEventHandler,
@@ -18,7 +16,7 @@ import {
   Viewer,
   createWorldTerrainAsync,
 } from 'cesium'
-import { PROTOTYPE_STORM } from '../../config/app'
+import { DEFAULT_FOCUS } from '../../config/app'
 import type {
   LightningObservation,
   RadarObservation,
@@ -26,11 +24,16 @@ import type {
   StormTrack,
 } from '../../weather/types/observations'
 import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
+import type { CloudFieldPoint } from '../../weather/adapters/cloudCoverGrid'
 import { lightningMarkerColor } from '../../weather/reconstruction/lightningQuality'
 import {
   createGeoregisteredVolume,
   type GeoregisteredVolumeHandle,
 } from './GeoregisteredVolume'
+import { createGlobalCloudField, type GlobalCloudFieldHandle } from './GlobalCloudField'
+import { createRadarRainShafts, type RadarRainShaftsHandle } from './RadarRainShafts'
+import { applySolarClock } from './solarClock'
+import type { LightingMode } from '../../lib/lightingMode'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 
 export interface GlobePick {
@@ -40,7 +43,6 @@ export interface GlobePick {
 
 export interface StormverseGlobe {
   viewer: Viewer
-  flyToStorm: (duration?: number) => void
   flyHome: (duration?: number) => void
   flyToCoords: (
     lon: number,
@@ -49,6 +51,9 @@ export interface StormverseGlobe {
     duration?: number,
     oblique?: boolean,
   ) => void
+  enterImmersive: (lon: number, lat: number, duration?: number) => void
+  exitImmersive: (duration?: number) => void
+  setImmersive: (immersive: boolean) => void
   setRadarFrame: (frame: RadarObservation | null) => void
   setRadarVisible: (visible: boolean) => void
   setSatelliteFrame: (frame: SatelliteObservation | null) => void
@@ -61,16 +66,27 @@ export interface StormverseGlobe {
   setTracksVisible: (visible: boolean) => void
   setLightningEvents: (events: LightningObservation[]) => void
   setLightningVisible: (visible: boolean) => void
+  setLightningEmphasis: (immersive: boolean) => void
   setVolumeTarget: (target: ReconstructionTarget | null) => void
   setVolumeTargets: (targets: ReconstructionTarget[]) => void
   setVolumeVisible: (visible: boolean) => void
+  setCloudField: (points: CloudFieldPoint[]) => void
+  setCloudsVisible: (visible: boolean) => void
+  setPrecipitationVisible: (visible: boolean) => void
+  setRainFromTracks: (tracks: StormTrack[], targets?: ReconstructionTarget[]) => void
+  setSolarTime: (opts: {
+    mode: LightingMode
+    observedAt: string | null
+    focusLon: number
+    focusLat: number
+  }) => void
   destroy: () => void
 }
 
 export async function createStormverseGlobe(
   container: HTMLElement,
   options: {
-    onStormSelect?: () => void
+    onEnterImmersive?: () => void
     onTrackSelect?: (trackId: string) => void
     onPick?: (pick: GlobePick) => void
   } = {},
@@ -100,7 +116,8 @@ export async function createStormverseGlobe(
     baseLayer: false,
   })
 
-  viewer.scene.globe.enableLighting = false
+  viewer.scene.globe.enableLighting = true
+  viewer.scene.globe.dynamicAtmosphereLighting = true
   viewer.scene.globe.baseColor = Color.fromCssColorString('#0a1520')
   viewer.scene.fog.enabled = true
   viewer.scene.globe.showGroundAtmosphere = true
@@ -111,8 +128,6 @@ export async function createStormverseGlobe(
   viewer.resize()
   viewer.scene.requestRender()
 
-  let terrainOk = false
-
   try {
     if (token) {
       const ionImagery = await IonImageryProvider.fromAssetId(2)
@@ -120,7 +135,6 @@ export async function createStormverseGlobe(
       viewer.imageryLayers.addImageryProvider(ionImagery)
     } else {
       viewer.imageryLayers.removeAll()
-      // Free Esri imagery — solid zoom coverage without an Ion token
       viewer.imageryLayers.addImageryProvider(
         new UrlTemplateImageryProvider({
           url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -147,10 +161,9 @@ export async function createStormverseGlobe(
   try {
     if (token) {
       viewer.terrainProvider = await createWorldTerrainAsync()
-      terrainOk = true
     }
   } catch {
-    terrainOk = false
+    /* keep ellipsoid */
   }
 
   let radarLayer: ImageryLayer | null = null
@@ -159,6 +172,8 @@ export async function createStormverseGlobe(
   let satelliteVisible = false
   let currentRadarUrl: string | null = null
   let currentSatUrl: string | null = null
+  let immersive = false
+  let lightningEmphasis = false
 
   const replaceOverlay = (
     current: ImageryLayer | null,
@@ -220,7 +235,7 @@ export async function createStormverseGlobe(
     satelliteLayer = replaceOverlay(
       satelliteLayer,
       satelliteVisible ? url : null,
-      0.45,
+      immersive ? 0.55 : 0.45,
       frame?.provenance.summary ?? 'Satellite',
     )
     if (satelliteLayer) satelliteLayer.show = satelliteVisible
@@ -238,51 +253,9 @@ export async function createStormverseGlobe(
     }
   }
 
-  const stormPosition = Cartesian3.fromDegrees(
-    PROTOTYPE_STORM.longitude,
-    PROTOTYPE_STORM.latitude,
-    12000,
-  )
-
-  viewer.entities.add({
-    id: PROTOTYPE_STORM.id,
-    name: PROTOTYPE_STORM.name,
-    position: stormPosition,
-    point: {
-      pixelSize: 14,
-      color: Color.fromCssColorString('#e8c27a').withAlpha(0.95),
-      outlineColor: Color.WHITE.withAlpha(0.7),
-      outlineWidth: 2,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    },
-    label: {
-      text: `${PROTOTYPE_STORM.name}  ·  synthetic reconstruction`,
-      font: '12px "IBM Plex Sans", system-ui, sans-serif',
-      fillColor: Color.WHITE,
-      outlineColor: Color.BLACK,
-      outlineWidth: 3,
-      style: LabelStyle.FILL_AND_OUTLINE,
-      verticalOrigin: VerticalOrigin.BOTTOM,
-      pixelOffset: new Cartesian2(0, -28),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      showBackground: true,
-      backgroundColor: Color.fromCssColorString('#0b1220').withAlpha(0.75),
-      backgroundPadding: new Cartesian2(10, 6),
-    },
-    ellipse: {
-      semiMajorAxis: 45000,
-      semiMinorAxis: 32000,
-      material: Color.fromCssColorString('#c4a35a').withAlpha(0.18),
-      height: terrainOk ? undefined : 0,
-      heightReference: terrainOk ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE,
-      outline: true,
-      outlineColor: Color.fromCssColorString('#e8c27a').withAlpha(0.45),
-    },
-    description: PROTOTYPE_STORM.description,
-  })
-
   const trackEntityIds = new Set<string>()
   let tracksVisible = true
+  let lastTracks: StormTrack[] = []
 
   const clearTracks = () => {
     for (const id of trackEntityIds) {
@@ -296,6 +269,7 @@ export async function createStormverseGlobe(
     selectedId: string | null = null,
     skillById: Record<string, number> = {},
   ) => {
+    lastTracks = tracks
     clearTracks()
     if (!tracksVisible) return
     for (const track of tracks) {
@@ -308,8 +282,7 @@ export async function createStormverseGlobe(
       const head = track.points[track.points.length - 1]
       const headId = `track-head-${track.id}`
       const skill = skillById[track.id]
-      const skillNote =
-        skill != null ? ` · skill ${Math.round(skill * 100)}%` : ''
+      const skillNote = skill != null ? ` · skill ${Math.round(skill * 100)}%` : ''
       viewer.entities.add({
         id: lineId,
         name: track.stormId,
@@ -374,23 +347,26 @@ export async function createStormverseGlobe(
     cachedLightning = events
     clearLightning()
     if (!lightningVisible) return
-    for (const ev of events.slice(0, 400)) {
+    for (const ev of events.slice(0, 500)) {
       const id = `lght-${ev.id}`
       const fill = lightningMarkerColor(ev)
-      const size =
+      const base =
         ev.classification === 'cloud_to_ground'
           ? 7
           : ev.qualityScore != null && ev.qualityScore >= 0.75
             ? 6
             : 4
+      const size = lightningEmphasis ? base * 1.55 : base
       viewer.entities.add({
         id,
         position: Cartesian3.fromDegrees(ev.longitude, ev.latitude, ev.altitudeM ?? 6000),
         point: {
           pixelSize: size,
-          color: Color.fromCssColorString(fill).withAlpha(0.92),
-          outlineColor: Color.fromCssColorString('#fff8d0').withAlpha(0.45),
-          outlineWidth: 1,
+          color: Color.fromCssColorString(fill).withAlpha(lightningEmphasis ? 0.98 : 0.92),
+          outlineColor: Color.fromCssColorString('#fff8d0').withAlpha(
+            lightningEmphasis ? 0.75 : 0.45,
+          ),
+          outlineWidth: lightningEmphasis ? 2 : 1,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       })
@@ -421,15 +397,62 @@ export async function createStormverseGlobe(
   }
 
   const volume: GeoregisteredVolumeHandle = createGeoregisteredVolume(viewer)
+  const clouds: GlobalCloudFieldHandle = createGlobalCloudField(viewer)
+  const rain: RadarRainShaftsHandle = createRadarRainShafts(viewer)
+  let lastVolumeTargets: ReconstructionTarget[] = []
+
+  const applyImmersiveCameraController = (on: boolean) => {
+    const ssc = viewer.scene.screenSpaceCameraController
+    ssc.minimumZoomDistance = on ? 120 : 2000
+    ssc.maximumZoomDistance = on ? 2.5e7 : 4.0e7
+    ssc.enableCollisionDetection = !on
+    clouds.setImmersiveEmphasis(on)
+  }
+
+  const setImmersive = (on: boolean) => {
+    immersive = on
+    lightningEmphasis = on
+    applyImmersiveCameraController(on)
+    if (cachedLightning.length > 0) setLightningEvents(cachedLightning)
+  }
+
+  const enterImmersive = (lon: number, lat: number, duration = 2.2) => {
+    setImmersive(true)
+    viewer.camera.flyTo({
+      destination: Cartesian3.fromDegrees(lon, lat - 0.35, 28_000),
+      orientation: {
+        heading: 0,
+        pitch: CesiumMath.toRadians(-18),
+        roll: 0,
+      },
+      duration,
+    })
+  }
+
+  const exitImmersive = (duration = 2.0) => {
+    setImmersive(false)
+    viewer.camera.flyTo({
+      destination: Cartesian3.fromDegrees(
+        DEFAULT_FOCUS.longitude,
+        DEFAULT_FOCUS.latitude,
+        12_000_000,
+      ),
+      orientation: {
+        heading: 0,
+        pitch: CesiumMath.toRadians(-90),
+        roll: 0,
+      },
+      duration,
+    })
+  }
 
   const handler = new ScreenSpaceEventHandler(viewer.scene.canvas)
   handler.setInputAction((movement: { position: Cartesian2 }) => {
     const picked = viewer.scene.pick(movement.position)
     if (picked && typeof picked === 'object' && 'id' in picked) {
       const rawId = (picked as { id?: unknown }).id
-      // Primitive GeometryInstance id is a plain string
       if (typeof rawId === 'string' && rawId.startsWith('stormverse-vol-')) {
-        options.onStormSelect?.()
+        options.onEnterImmersive?.()
         return
       }
       const entity = (
@@ -438,11 +461,8 @@ export async function createStormverseGlobe(
         }
       ).id
       const entityId = typeof entity === 'string' ? entity : entity?.id
-      if (
-        entityId === PROTOTYPE_STORM.id ||
-        (typeof entityId === 'string' && entityId.startsWith('stormverse-vol-'))
-      ) {
-        options.onStormSelect?.()
+      if (typeof entityId === 'string' && entityId.startsWith('stormverse-vol-')) {
+        options.onEnterImmersive?.()
         return
       }
       const trackProp = typeof entity === 'object' ? entity?.properties?.trackId : undefined
@@ -475,26 +495,14 @@ export async function createStormverseGlobe(
 
   const flyHome = (duration = 2.2) => {
     viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(134.0, -26.0, 12_000_000),
-      orientation: {
-        heading: 0,
-        pitch: CesiumMath.toRadians(-90),
-        roll: 0,
-      },
-      duration,
-    })
-  }
-
-  const flyToStorm = (duration = 2.4) => {
-    viewer.camera.flyTo({
       destination: Cartesian3.fromDegrees(
-        PROTOTYPE_STORM.longitude,
-        PROTOTYPE_STORM.latitude - 1.8,
-        420_000,
+        DEFAULT_FOCUS.longitude,
+        DEFAULT_FOCUS.latitude,
+        12_000_000,
       ),
       orientation: {
         heading: 0,
-        pitch: CesiumMath.toRadians(-45),
+        pitch: CesiumMath.toRadians(-90),
         roll: 0,
       },
       duration,
@@ -509,7 +517,6 @@ export async function createStormverseGlobe(
     oblique = false,
   ) => {
     if (oblique) {
-      // Stand south of the target and look north-down so vertical storm structure reads.
       const offsetDeg = Math.max(0.55, height / 280_000)
       viewer.camera.flyTo({
         destination: Cartesian3.fromDegrees(lon, lat - offsetDeg, height),
@@ -532,9 +539,11 @@ export async function createStormverseGlobe(
 
   return {
     viewer,
-    flyToStorm,
     flyHome,
     flyToCoords,
+    enterImmersive,
+    exitImmersive,
+    setImmersive,
     setRadarFrame,
     setRadarVisible,
     setSatelliteFrame,
@@ -543,11 +552,34 @@ export async function createStormverseGlobe(
     setTracksVisible,
     setLightningEvents,
     setLightningVisible,
-    setVolumeTarget: (target) => volume.setTarget(target),
-    setVolumeTargets: (targets) => volume.setTargets(targets),
+    setLightningEmphasis: (on) => {
+      lightningEmphasis = on
+      if (cachedLightning.length > 0) setLightningEvents(cachedLightning)
+    },
+    setVolumeTarget: (target) => {
+      lastVolumeTargets = target ? [target] : []
+      volume.setTarget(target)
+      rain.setFromTracks(lastTracks, lastVolumeTargets)
+    },
+    setVolumeTargets: (targets) => {
+      lastVolumeTargets = targets
+      volume.setTargets(targets)
+      rain.setFromTracks(lastTracks, lastVolumeTargets)
+    },
     setVolumeVisible: (v) => volume.setVisible(v),
+    setCloudField: (points) => clouds.setPoints(points),
+    setCloudsVisible: (v) => clouds.setVisible(v),
+    setPrecipitationVisible: (v) => rain.setVisible(v),
+    setRainFromTracks: (tracks, targets) => {
+      lastTracks = tracks
+      if (targets) lastVolumeTargets = targets
+      rain.setFromTracks(tracks, lastVolumeTargets)
+    },
+    setSolarTime: (opts) => applySolarClock(viewer, opts),
     destroy: () => {
       volume.destroy()
+      clouds.destroy()
+      rain.destroy()
       clearTracks()
       clearLightning()
       handler.destroy()

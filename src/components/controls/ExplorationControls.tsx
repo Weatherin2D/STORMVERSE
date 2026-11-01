@@ -1,15 +1,11 @@
-import type { LightingMode } from '../../rendering/atmosphere/lighting'
-import type { StormCameraPreset } from '../../rendering/storm/StormControls'
+import type { LightingMode } from '../../lib/lightingMode'
 import type { LayerState, ViewMode } from '../../lib/appState'
-import type { CloudParams } from '../../rendering/clouds/CloudVolume'
 
 interface ExplorationControlsProps {
   viewMode: ViewMode
   lightingMode: LightingMode
   layers: LayerState
   reducedFlash: boolean
-  debugOpen: boolean
-  cloudParams: CloudParams
   satelliteAvailable: boolean
   tracksLoading: boolean
   lightningConfigured: boolean
@@ -18,32 +14,28 @@ interface ExplorationControlsProps {
   followTrack: boolean
   chaseVolume: boolean
   compareCount: number
+  cloudFieldLoading: boolean
   onLightingMode: (m: LightingMode) => void
   onLayers: (l: Partial<LayerState>) => void
-  onPreset: (p: StormCameraPreset) => void
   onReducedFlash: (v: boolean) => void
-  onToggleDebug: () => void
-  onCloudParams: (p: Partial<CloudParams>) => void
-  onEnterStorm: () => void
+  onEnterImmersive: () => void
   onPinSelectedCell: () => void
-  onEnterSelectedCell: () => void
   onCompareTop: () => void
   onClearCompare: () => void
   onFollowTrack: (v: boolean) => void
   onChaseVolume: (v: boolean) => void
-  onReturnGlobe: () => void
+  onExitImmersive: () => void
   onTogglePanel: () => void
-  onDemoLightning: () => void
   onRefreshWeather: () => void
   hasSelectedTrack: boolean
 }
 
-const PRESETS: { id: StormCameraPreset; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'cloudTop', label: 'Cloud top' },
-  { id: 'sideProfile', label: 'Side' },
-  { id: 'ground', label: 'Ground' },
-  { id: 'radar', label: 'Radar view' },
+const LIGHTING: { id: LightingMode; label: string; title: string }[] = [
+  { id: 'followSun', label: 'Follow sun', title: 'Astronomical sun from observation UTC' },
+  { id: 'day', label: 'Day', title: 'Preview override — not solar time' },
+  { id: 'sunrise', label: 'Sunrise', title: 'Preview override — not solar time' },
+  { id: 'sunset', label: 'Sunset', title: 'Preview override — not solar time' },
+  { id: 'night', label: 'Night', title: 'Preview override — not solar time' },
 ]
 
 export function ExplorationControls({
@@ -51,8 +43,6 @@ export function ExplorationControls({
   lightingMode,
   layers,
   reducedFlash,
-  debugOpen,
-  cloudParams,
   satelliteAvailable,
   tracksLoading,
   lightningConfigured,
@@ -61,22 +51,18 @@ export function ExplorationControls({
   followTrack,
   chaseVolume,
   compareCount,
+  cloudFieldLoading,
   onLightingMode,
   onLayers,
-  onPreset,
   onReducedFlash,
-  onToggleDebug,
-  onCloudParams,
-  onEnterStorm,
+  onEnterImmersive,
   onPinSelectedCell,
-  onEnterSelectedCell,
   onCompareTop,
   onClearCompare,
   onFollowTrack,
   onChaseVolume,
-  onReturnGlobe,
+  onExitImmersive,
   onTogglePanel,
-  onDemoLightning,
   onRefreshWeather,
   hasSelectedTrack,
 }: ExplorationControlsProps) {
@@ -85,8 +71,8 @@ export function ExplorationControls({
       <div className="control-cluster wrap">
         {viewMode === 'globe' ? (
           <>
-            <button type="button" className="primary" onClick={onEnterStorm}>
-              Enter prototype
+            <button type="button" className="primary" onClick={onEnterImmersive}>
+              Enter immersive
             </button>
             <button
               type="button"
@@ -96,14 +82,6 @@ export function ExplorationControls({
               onClick={onPinSelectedCell}
             >
               {volumePinned ? 'Add to compare' : 'Pin volume'}
-            </button>
-            <button
-              type="button"
-              disabled={!hasSelectedTrack}
-              title="Open immersive Three.js reconstruction for the selected cell"
-              onClick={onEnterSelectedCell}
-            >
-              Enter immersive
             </button>
             <button
               type="button"
@@ -120,62 +98,109 @@ export function ExplorationControls({
             )}
           </>
         ) : (
-          <button type="button" onClick={onReturnGlobe}>
-            Earth view
+          <button type="button" onClick={onExitImmersive}>
+            Exit immersive
           </button>
         )}
         <button type="button" onClick={onTogglePanel}>
           Info
         </button>
+        <button type="button" onClick={onRefreshWeather}>
+          Refresh
+        </button>
       </div>
 
-      {viewMode === 'globe' && (
+      <div className="control-cluster wrap">
+        <button
+          type="button"
+          className={layers.clouds ? 'active' : ''}
+          title={
+            cloudFieldLoading
+              ? 'Loading Open-Meteo cloud-cover grid…'
+              : 'Model cloud-cover field (low/mid/high type proxies)'
+          }
+          onClick={() => onLayers({ clouds: !layers.clouds })}
+        >
+          Clouds{cloudFieldLoading ? '…' : ''}
+        </button>
+        <button
+          type="button"
+          className={layers.precipitation ? 'active' : ''}
+          title="Derived rain shafts at RainViewer-driven cell heads"
+          onClick={() => onLayers({ precipitation: !layers.precipitation })}
+        >
+          Rain shafts
+        </button>
+        <button
+          type="button"
+          className={layers.radar ? 'active' : ''}
+          onClick={() => onLayers({ radar: !layers.radar })}
+        >
+          Radar
+        </button>
+        <button
+          type="button"
+          className={layers.satellite ? 'active' : ''}
+          disabled={!satelliteAvailable}
+          title={
+            satelliteAvailable
+              ? 'Toggle infrared satellite mosaic'
+              : 'Infrared frames not currently in the catalog'
+          }
+          onClick={() => onLayers({ satellite: !layers.satellite })}
+        >
+          Satellite IR
+        </button>
+        <button
+          type="button"
+          className={layers.tracks ? 'active' : ''}
+          title={tracksLoading ? 'Deriving tracks…' : 'Derived cell tracks'}
+          onClick={() => onLayers({ tracks: !layers.tracks })}
+        >
+          Tracks
+        </button>
+        <button
+          type="button"
+          className={layers.lightningObs ? 'active' : ''}
+          disabled={!lightningConfigured && lightningCount === 0}
+          title={
+            lightningConfigured || lightningCount > 0
+              ? 'Direct GeoJSON / case-study lightning only'
+              : 'No lightning feed configured'
+          }
+          onClick={() => onLayers({ lightningObs: !layers.lightningObs })}
+        >
+          Lightning{lightningCount > 0 ? ` (${lightningCount})` : ''}
+        </button>
+        <button
+          type="button"
+          className={layers.volume ? 'active' : ''}
+          title="Procedural georegistered cell volumes (derived aids)"
+          onClick={() => onLayers({ volume: !layers.volume })}
+        >
+          Volumes
+        </button>
+      </div>
+
+      <div className="control-cluster wrap">
+        {LIGHTING.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            className={lightingMode === m.id ? 'active' : ''}
+            title={m.title}
+            onClick={() => onLightingMode(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {compareCount > 0 && (
         <div className="control-cluster wrap">
           <button
             type="button"
-            className={layers.radar ? 'active' : ''}
-            onClick={() => onLayers({ radar: !layers.radar })}
-          >
-            Radar
-          </button>
-          <button
-            type="button"
-            className={layers.satellite ? 'active' : ''}
-            disabled={!satelliteAvailable}
-            title={
-              satelliteAvailable
-                ? 'Toggle infrared satellite mosaic'
-                : 'Infrared frames not currently in the catalog'
-            }
-            onClick={() => onLayers({ satellite: !layers.satellite })}
-          >
-            Satellite IR
-          </button>
-          <button
-            type="button"
-            className={layers.tracks ? 'active' : ''}
-            title="Derived cell tracks from radar mosaics (low confidence)"
-            onClick={() => onLayers({ tracks: !layers.tracks })}
-          >
-            {tracksLoading ? 'Tracks…' : 'Cell tracks'}
-          </button>
-          <button
-            type="button"
-            className={layers.volume ? 'active' : ''}
-            title="Georegistered procedural storm volume (not a measured radar volume)"
-            onClick={() => onLayers({ volume: !layers.volume })}
-          >
-            Volume
-          </button>
-          <button
-            type="button"
             className={followTrack ? 'active' : ''}
-            disabled={!volumePinned}
-            title={
-              volumePinned
-                ? 'Move the pinned volume along the derived track as observation time scrubs'
-                : 'Pin a cell volume first'
-            }
             onClick={() => onFollowTrack(!followTrack)}
           >
             Follow track
@@ -183,123 +208,23 @@ export function ExplorationControls({
           <button
             type="button"
             className={chaseVolume ? 'active' : ''}
-            disabled={!volumePinned || !followTrack}
-            title="Gently re-frame the camera on the moving volume"
             onClick={() => onChaseVolume(!chaseVolume)}
           >
-            Chase
-          </button>
-          <button
-            type="button"
-            className={layers.lightningObs ? 'active' : ''}
-            disabled={!lightningConfigured}
-            title={
-              lightningConfigured
-                ? `Toggle lightning feed (${lightningCount} events)`
-                : 'Set VITE_LIGHTNING_GEOJSON_URL to enable'
-            }
-            onClick={() => onLayers({ lightningObs: !layers.lightningObs })}
-          >
-            Lightning
-          </button>
-          <button type="button" onClick={onRefreshWeather}>
-            Refresh data
+            Chase camera
           </button>
         </div>
       )}
 
-      {viewMode === 'storm' && (
-        <>
-          <div className="control-cluster wrap">
-            {(['day', 'sunset', 'night'] as LightingMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={lightingMode === mode ? 'active' : ''}
-                onClick={() => onLightingMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-
-          <div className="control-cluster wrap">
-            <button
-              type="button"
-              className={layers.clouds ? 'active' : ''}
-              onClick={() => onLayers({ clouds: !layers.clouds })}
-            >
-              Clouds
-            </button>
-            <button
-              type="button"
-              className={layers.lightning ? 'active' : ''}
-              onClick={() => onLayers({ lightning: !layers.lightning })}
-            >
-              Lightning
-            </button>
-            <button
-              type="button"
-              className={layers.precipitation ? 'active' : ''}
-              onClick={() => onLayers({ precipitation: !layers.precipitation })}
-            >
-              Precip
-            </button>
-            <button type="button" onClick={onDemoLightning}>
-              Flash
-            </button>
-          </div>
-
-          <div className="control-cluster wrap">
-            {PRESETS.map((p) => (
-              <button key={p.id} type="button" onClick={() => onPreset(p.id)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="control-cluster wrap">
-            <button
-              type="button"
-              className={reducedFlash ? 'active' : ''}
-              onClick={() => onReducedFlash(!reducedFlash)}
-            >
-              Reduced flash
-            </button>
-            <button type="button" className={debugOpen ? 'active' : ''} onClick={onToggleDebug}>
-              Cloud tune
-            </button>
-          </div>
-
-          {debugOpen && (
-            <div className="debug-panel">
-              {(
-                [
-                  ['density', cloudParams.density],
-                  ['verticalDevelopment', cloudParams.verticalDevelopment],
-                  ['anvilExtent', cloudParams.anvilExtent],
-                  ['edgeSoftness', cloudParams.edgeSoftness],
-                  ['turbulence', cloudParams.turbulence],
-                  ['fineDetail', cloudParams.fineDetail],
-                  ['lightingResponse', cloudParams.lightingResponse],
-                ] as const
-              ).map(([key, value]) => (
-                <label key={key}>
-                  <span>{key}</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={value}
-                    onChange={(e) => onCloudParams({ [key]: Number(e.target.value) })}
-                  />
-                </label>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      <div className="control-cluster wrap">
+        <button
+          type="button"
+          className={reducedFlash ? 'active' : ''}
+          title="Reduce lightning flash emphasis"
+          onClick={() => onReducedFlash(!reducedFlash)}
+        >
+          Reduce flash
+        </button>
+      </div>
     </div>
   )
 }

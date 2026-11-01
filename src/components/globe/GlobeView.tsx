@@ -4,17 +4,21 @@ import {
   type StormverseGlobe,
 } from '../../rendering/globe/createViewer'
 import type {
+  CloudFieldPoint,
   LightningObservation,
   RadarObservation,
   SatelliteObservation,
   StormTrack,
 } from '../../weather'
 import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
+import type { LightingMode } from '../../lib/lightingMode'
 
 interface GlobeViewProps {
   active: boolean
-  requestFlyToStorm: number
+  immersive: boolean
   requestFlyHome: number
+  requestEnterImmersive: number
+  immersiveFocus: { lon: number; lat: number } | null
   flyTarget: {
     lon: number
     lat: number
@@ -22,7 +26,7 @@ interface GlobeViewProps {
     token: number
     oblique?: boolean
   } | null
-  onEnterStorm: () => void
+  onEnterImmersive: () => void
   onTrackSelect: (trackId: string) => void
   radarFrame: RadarObservation | null
   satelliteFrame: SatelliteObservation | null
@@ -31,20 +35,28 @@ interface GlobeViewProps {
   tracks: StormTrack[]
   tracksVisible: boolean
   selectedTrackId: string | null
-  /** Heuristic track-skill composites keyed by track id. */
   trackSkillById: Record<string, number>
   lightningEvents: LightningObservation[]
   lightningVisible: boolean
   volumeTarget: ReconstructionTarget | null
   volumeTargets: ReconstructionTarget[]
   volumeVisible: boolean
+  cloudField: CloudFieldPoint[]
+  cloudsVisible: boolean
+  precipitationVisible: boolean
+  lightingMode: LightingMode
+  observedAt: string | null
+  focusLon: number
+  focusLat: number
 }
 
 export function GlobeView({
-  requestFlyToStorm,
+  immersive,
   requestFlyHome,
+  requestEnterImmersive,
+  immersiveFocus,
   flyTarget,
-  onEnterStorm,
+  onEnterImmersive,
   onTrackSelect,
   radarFrame,
   satelliteFrame,
@@ -59,12 +71,19 @@ export function GlobeView({
   volumeTarget,
   volumeTargets,
   volumeVisible,
+  cloudField,
+  cloudsVisible,
+  precipitationVisible,
+  lightingMode,
+  observedAt,
+  focusLon,
+  focusLat,
 }: GlobeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<StormverseGlobe | null>(null)
-  const onEnterRef = useRef(onEnterStorm)
+  const onEnterRef = useRef(onEnterImmersive)
   const onTrackRef = useRef(onTrackSelect)
-  onEnterRef.current = onEnterStorm
+  onEnterRef.current = onEnterImmersive
   onTrackRef.current = onTrackSelect
 
   useEffect(() => {
@@ -73,7 +92,7 @@ export function GlobeView({
     let cancelled = false
 
     createStormverseGlobe(el, {
-      onStormSelect: () => onEnterRef.current(),
+      onEnterImmersive: () => onEnterRef.current(),
       onTrackSelect: (id) => onTrackRef.current(id),
     })
       .then((globe) => {
@@ -87,12 +106,18 @@ export function GlobeView({
         globe.setTracksVisible(tracksVisible)
         globe.setLightningVisible(lightningVisible)
         globe.setVolumeVisible(volumeVisible)
+        globe.setCloudsVisible(cloudsVisible)
+        globe.setPrecipitationVisible(precipitationVisible)
         if (radarFrame) globe.setRadarFrame(radarFrame)
         if (satelliteFrame) globe.setSatelliteFrame(satelliteFrame)
         globe.setTracks(tracks, selectedTrackId, trackSkillById)
         globe.setLightningEvents(lightningEvents)
         if (volumeTargets.length > 0) globe.setVolumeTargets(volumeTargets)
         else if (volumeTarget) globe.setVolumeTarget(volumeTarget)
+        globe.setCloudField(cloudField)
+        globe.setRainFromTracks(tracks, volumeTargets)
+        globe.setSolarTime({ mode: lightingMode, observedAt, focusLon, focusLat })
+        globe.setImmersive(immersive)
       })
       .catch((err) => {
         console.error('Failed to initialise Cesium globe', err)
@@ -107,14 +132,14 @@ export function GlobeView({
   }, [])
 
   useEffect(() => {
-    if (requestFlyToStorm === 0) return
-    globeRef.current?.flyToStorm()
-  }, [requestFlyToStorm])
+    if (requestFlyHome === 0) return
+    globeRef.current?.exitImmersive(2.0)
+  }, [requestFlyHome])
 
   useEffect(() => {
-    if (requestFlyHome === 0) return
-    globeRef.current?.flyHome()
-  }, [requestFlyHome])
+    if (requestEnterImmersive === 0 || !immersiveFocus) return
+    globeRef.current?.enterImmersive(immersiveFocus.lon, immersiveFocus.lat)
+  }, [requestEnterImmersive, immersiveFocus])
 
   useEffect(() => {
     if (!flyTarget || flyTarget.token === 0) return
@@ -128,16 +153,20 @@ export function GlobeView({
   }, [flyTarget])
 
   useEffect(() => {
+    globeRef.current?.setImmersive(immersive)
+  }, [immersive])
+
+  useEffect(() => {
     globeRef.current?.setRadarFrame(radarFrame)
   }, [radarFrame])
 
   useEffect(() => {
-    globeRef.current?.setSatelliteFrame(satelliteFrame)
-  }, [satelliteFrame])
-
-  useEffect(() => {
     globeRef.current?.setRadarVisible(radarVisible)
   }, [radarVisible])
+
+  useEffect(() => {
+    globeRef.current?.setSatelliteFrame(satelliteFrame)
+  }, [satelliteFrame])
 
   useEffect(() => {
     globeRef.current?.setSatelliteVisible(satelliteVisible)
@@ -145,7 +174,8 @@ export function GlobeView({
 
   useEffect(() => {
     globeRef.current?.setTracks(tracks, selectedTrackId, trackSkillById)
-  }, [tracks, selectedTrackId, trackSkillById])
+    globeRef.current?.setRainFromTracks(tracks, volumeTargets)
+  }, [tracks, selectedTrackId, trackSkillById, volumeTargets])
 
   useEffect(() => {
     globeRef.current?.setTracksVisible(tracksVisible)
@@ -160,16 +190,29 @@ export function GlobeView({
   }, [lightningVisible])
 
   useEffect(() => {
-    if (volumeTargets.length > 0) {
-      globeRef.current?.setVolumeTargets(volumeTargets)
-      return
-    }
-    globeRef.current?.setVolumeTarget(volumeTarget)
+    if (volumeTargets.length > 0) globeRef.current?.setVolumeTargets(volumeTargets)
+    else globeRef.current?.setVolumeTarget(volumeTarget)
   }, [volumeTarget, volumeTargets])
 
   useEffect(() => {
     globeRef.current?.setVolumeVisible(volumeVisible)
   }, [volumeVisible])
 
-  return <div ref={containerRef} className="viewport-layer globe-layer" />
+  useEffect(() => {
+    globeRef.current?.setCloudField(cloudField)
+  }, [cloudField])
+
+  useEffect(() => {
+    globeRef.current?.setCloudsVisible(cloudsVisible)
+  }, [cloudsVisible])
+
+  useEffect(() => {
+    globeRef.current?.setPrecipitationVisible(precipitationVisible)
+  }, [precipitationVisible])
+
+  useEffect(() => {
+    globeRef.current?.setSolarTime({ mode: lightingMode, observedAt, focusLon, focusLat })
+  }, [lightingMode, observedAt, focusLon, focusLat])
+
+  return <div className={`globe-root${immersive ? ' immersive' : ''}`} ref={containerRef} />
 }

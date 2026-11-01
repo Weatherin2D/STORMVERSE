@@ -784,6 +784,16 @@ button {
   border-top: 1px dashed var(--border);
 }
 
+.globe-root {
+  position: absolute;
+  inset: 0;
+}
+
+.globe-root.immersive {
+  /* Immersive stays on Cesium; cue chrome that near-flight is active */
+  box-shadow: inset 0 0 0 1px rgba(180, 210, 255, 0.12);
+}
+
 .case-study-card .case-import {
   margin: 12px 0 10px;
   padding-top: 8px;

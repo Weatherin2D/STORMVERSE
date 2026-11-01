@@ -27,7 +27,7 @@ export function TimelineBar({
     <div
       className="timeline-bar"
       role="region"
-      aria-label={viewMode === 'globe' ? 'Observation timeline' : 'Prototype simulation timeline'}
+      aria-label="Observation timeline"
     >
       <div className="timeline-meta">
         <span className="badge">{badge}</span>

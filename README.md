@@ -1,6 +1,6 @@
 # STORMVERSE
 
-Immersive browser-based 3D thunderstorm exploration platform.
+Immersive browser-based 3D thunderstorm exploration platform — Cesium globe with an observation-driven atmospheric shell (no synthetic prototype storm).
 
 ## Run locally
 
@@ -46,8 +46,8 @@ Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShe
 
 ## Milestone status
 
-### 1 — Visual prototype
-Cesium Earth, ray-marched synthetic thunderstorm, lighting, FX, typed weather interfaces.
+### 1 — Visual foundation
+Cesium Earth, typed weather interfaces, early immersive scaffolding (later replaced by global atmosphere).
 
 ### 2 — Live observation overlays
 RainViewer radar mosaics, observation timeline, optional IR, Open-Meteo site context.
@@ -134,17 +134,27 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Catalog/example fixtures without attestation cannot use the attested export path
 - Re-import still requires a fresh rights attestation in the UI
 
-### 20 — Portable shelf backup / restore (current)
+### 20 — Portable shelf backup / restore
 - Download the whole local import shelf as a STORMVERSE backup JSON
 - Restore into another browser/profile (merge by pack id, or replace shelf)
 - Restore gated by a fresh rights attestation + licence note
 - Still file-based and device-local — not cloud sync; no scraping
+
+### 21 — Global Cesium immersive atmosphere (current)
+- Immersive mode stays on the Cesium globe (prototype Three.js storm removed)
+- Global cloud field from Open-Meteo `cloud_cover_low/mid/high` (type **proxies** only)
+- RainViewer IR mosaic + derived rain shafts at cell heads; radar mosaic unchanged
+- Lightning only from GeoJSON / samples / attested case packs — never invented strokes
+- Astronomical sun from observation UTC (`Follow sun`); day/sunrise/sunset/night are labelled previews
 
 ## Scientific integrity
 
 | Visual | Interpretation |
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
+| Rain shafts | **Derived** cues at RainViewer-driven cell heads — not measured volumes |
+| Global cloud field | Open-Meteo model cloud-cover bands → height shells / type **proxies** (not WMO types or CTH) |
+| Satellite IR | Processed RainViewer infrared mosaic |
 | Cell tracks | Derived heuristic (low confidence) |
 | Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
@@ -155,9 +165,9 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Schematic RHI | **Procedural** range–height sketch — not measured reflectivity |
 | Globe volume / compare set | **Procedural**, georegistered |
 | Scene snapshot / bookmark | UI/state only — does not freeze live weather fields |
-| Immersive 3D storm | **Procedural** local scene |
-| Globe lightning | Direct only from configured/sample/case GeoJSON — quality fields from feed |
-| Prototype storm / demo bolts | Synthetic |
+| Immersive atmosphere | Same Cesium globe; fly-through of observation/model-driven layers |
+| Globe lightning | Direct only from configured/sample/case GeoJSON — never invented |
+| Day / sunrise / sunset / night | Astronomical sun from observation UTC (or labelled preview override) |
 
 ## Known limitations
 
@@ -176,11 +186,11 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 ## Next ideas
 
 1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
-2. Licensed radar volume / true RHI products under proper licensing
-3. Optional combined scene-bookmark + shelf workspace export
+2. Licensed radar volume / true RHI / retrieved cloud-top height products under proper licensing
+3. Denser cloud-field LOD / GPU volumetric shells when licensed CTH/COT feeds exist
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
 ## Stack
 
-Vite · React · TypeScript · CesiumJS · Three.js · RainViewer · Open-Meteo · optional GeoJSON lightning
+Vite · React · TypeScript · CesiumJS · RainViewer · Open-Meteo · optional GeoJSON lightning

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { GlobeView } from './components/globe/GlobeView'
-import { StormView } from './components/storm/StormView'
 import { ExplorationControls } from './components/controls/ExplorationControls'
 import { InfoPanel } from './components/panels/InfoPanel'
 import { TimelineBar } from './components/timeline/TimelineBar'
@@ -18,9 +17,7 @@ import {
 } from './lib/sceneSnapshot'
 import { usePrefersReducedMotion } from './hooks/usePrefersReducedMotion'
 import { useLiveWeather } from './hooks/useLiveWeather'
-import type { StormCameraPreset } from './rendering/storm/StormControls'
-import type { LightingMode } from './rendering/atmosphere/lighting'
-import type { CloudParams } from './rendering/clouds/CloudVolume'
+import type { LightingMode } from './lib/lightingMode'
 import {
   DEFAULT_CROSS_PRODUCT_TIME_WINDOW_SEC,
   DEFAULT_LIGHTNING_FILTER,
@@ -30,14 +27,12 @@ import {
   interpolateTrackAtCursor,
   lightningInObservationWindow,
   mapEnvironmentToReconstruction,
-  prototypeProvider,
   summarizeLightningQuality,
-  type LightningObservation,
   type LightningQualityFilter,
   type LightningSyncMode,
   type ReconstructionTarget,
 } from './weather'
-import { TIMELINE } from './config/app'
+import { DEFAULT_FOCUS, TIMELINE } from './config/app'
 import { accentForIndex, MAX_COMPARE_VOLUMES } from './config/compare'
 import { SceneShareControls } from './components/controls/SceneShareControls'
 import {
@@ -53,8 +48,8 @@ export default function App() {
   const reducedMotion = usePrefersReducedMotion()
   const [state, setState] = useState(() => createInitialAppState(reducedMotion))
   const live = useLiveWeather(state.layers.tracks)
-  const [flyStormToken, setFlyStormToken] = useState(0)
   const [flyHomeToken, setFlyHomeToken] = useState(0)
+  const [enterImmersiveToken, setEnterImmersiveToken] = useState(0)
   const [flyTarget, setFlyTarget] = useState<{
     lon: number
     lat: number
@@ -62,18 +57,8 @@ export default function App() {
     token: number
     oblique?: boolean
   } | null>(null)
-  const [presetToken, setPresetToken] = useState(0)
-  const [lightningToken, setLightningToken] = useState(0)
-  const [lightningEvent, setLightningEvent] = useState<LightningObservation | null>(null)
-  const [syntheticLightning, setSyntheticLightning] = useState<LightningObservation[]>([])
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
-  const [reconMode, setReconMode] = useState<'prototype' | 'cell'>('prototype')
-  const [pinnedVolumeMode, setPinnedVolumeMode] = useState<'prototype' | 'cell' | null>(
-    'prototype',
-  )
-  const [pinnedVolumeSnapshot, setPinnedVolumeSnapshot] = useState(() =>
-    mapEnvironmentToReconstruction(null, null),
-  )
+  const [pinnedVolumeMode, setPinnedVolumeMode] = useState<'cell' | null>(null)
   /** Track ids pinned for multi-cell volume comparison (selected is primary). */
   const [compareTrackIds, setCompareTrackIds] = useState<string[]>([])
   /** When true, pinned cell volumes follow derived tracks through observation time. */
@@ -179,16 +164,6 @@ export default function App() {
   }, [reducedMotion])
 
   useEffect(() => {
-    let cancelled = false
-    prototypeProvider.getLightning({}).then((events) => {
-      if (!cancelled) setSyntheticLightning(events)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
     if (live.tracks.length === 0) {
       setSelectedTrackId(null)
       setCompareTrackIds([])
@@ -205,21 +180,10 @@ export default function App() {
     [live.tracks, selectedTrackId],
   )
 
-  const reconstruction = useMemo(
-    () => mapEnvironmentToReconstruction(live.environment, reconMode === 'cell' ? selectedTrack : null),
-    [live.environment, reconMode, selectedTrack],
-  )
-
   const previewReconstruction = useMemo(
     () => mapEnvironmentToReconstruction(live.environment, selectedTrack),
     [live.environment, selectedTrack],
   )
-
-  // Keep prototype pin in sync with latest CAPE; cell pin uses explicit snapshot / track animation.
-  useEffect(() => {
-    if (pinnedVolumeMode !== 'prototype') return
-    setPinnedVolumeSnapshot(mapEnvironmentToReconstruction(live.environment, null))
-  }, [live.environment, pinnedVolumeMode])
 
   const compareVolumes = useMemo((): ReconstructionTarget[] => {
     if (pinnedVolumeMode !== 'cell' || compareTrackIds.length === 0) return []
@@ -255,19 +219,15 @@ export default function App() {
 
   const globeVolumeTargets = useMemo(() => {
     if (pinnedVolumeMode === 'cell') return compareVolumes
-    if (pinnedVolumeMode === 'prototype' && pinnedVolumeSnapshot) {
-      return [{ ...pinnedVolumeSnapshot, accentCss: accentForIndex(0), primary: true }]
-    }
     return [] as ReconstructionTarget[]
-  }, [pinnedVolumeMode, compareVolumes, pinnedVolumeSnapshot])
+  }, [pinnedVolumeMode, compareVolumes])
 
   const globeVolumeTarget = globeVolumeTargets.find((t) => t.primary) ?? globeVolumeTargets[0] ?? null
 
-  // Optional gentle chase camera while the primary volume walks its track
   const lastChaseRef = useRef(0)
   useEffect(() => {
     if (!chaseVolume || !followTrack || pinnedVolumeMode !== 'cell') return
-    if (!globeVolumeTarget || state.viewMode !== 'globe') return
+    if (!globeVolumeTarget) return
     const now = performance.now()
     if (now - lastChaseRef.current < 2200) return
     lastChaseRef.current = now
@@ -284,13 +244,11 @@ export default function App() {
     pinnedVolumeMode,
     globeVolumeTarget?.longitude,
     globeVolumeTarget?.latitude,
-    state.viewMode,
   ])
 
   useEffect(() => {
     if (live.radarFrames.length === 0) return
     setState((s) => {
-      if (s.viewMode !== 'globe') return s
       const max = Math.max(0, live.radarFrames.length - 1)
       const trackNote =
         s.layers.tracks && live.tracks.length > 0
@@ -298,6 +256,11 @@ export default function App() {
           : live.tracksLoading
             ? ' · deriving tracks…'
             : ''
+      const cloudNote = live.cloudFieldLoading
+        ? ' · cloud grid…'
+        : live.cloudField.length > 0
+          ? ` · ${live.cloudField.length} cloud pts`
+          : ''
       const lghtNote =
         live.lightningConfigured && live.lightningEvents.length > 0
           ? filteredLightningEvents.length === live.lightningEvents.length
@@ -309,12 +272,12 @@ export default function App() {
         timeline: {
           ...s.timeline,
           max,
-          cursor: max,
+          cursor: Math.min(s.timeline.cursor, max) || max,
           playing: true,
         },
         statusMessage: live.error
           ? `Radar feed error: ${live.error}`
-          : `Live radar · ${live.radarFrames.length} frames${trackNote}${lghtNote}`,
+          : `Live radar · ${live.radarFrames.length} frames${trackNote}${cloudNote}${lghtNote}`,
       }
     })
   }, [
@@ -324,6 +287,8 @@ export default function App() {
     live.tracksLoading,
     live.lightningConfigured,
     live.lightningEvents.length,
+    live.cloudField.length,
+    live.cloudFieldLoading,
     filteredLightningEvents.length,
     state.layers.tracks,
   ])
@@ -337,116 +302,46 @@ export default function App() {
       last = now
       setState((s) => {
         if (!s.timeline.playing) return s
-        if (s.viewMode === 'globe') {
-          const next = s.timeline.cursor + dt * s.timeline.speed * (1 / 0.7)
-          const wrapped = next > s.timeline.max ? 0 : next
-          return { ...s, timeline: { ...s.timeline, cursor: wrapped } }
-        }
-        const next = s.timeline.cursor + dt * s.timeline.speed
-        const wrapped = next >= s.timeline.max ? 0 : next
+        const next = s.timeline.cursor + dt * s.timeline.speed * (1 / 0.7)
+        const wrapped = next > s.timeline.max ? 0 : next
         return { ...s, timeline: { ...s.timeline, cursor: wrapped } }
       })
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [state.timeline.playing, state.timeline.speed, state.viewMode])
+  }, [state.timeline.playing, state.timeline.speed])
 
   const radarIndex = Math.min(
     live.radarFrames.length - 1,
     Math.max(0, Math.round(state.timeline.cursor)),
   )
-  const radarFrame =
-    state.viewMode === 'globe' && live.radarFrames.length > 0
-      ? live.radarFrames[radarIndex]
-      : null
+  const radarFrame = live.radarFrames.length > 0 ? live.radarFrames[radarIndex] : null
 
   const satIndex = Math.min(
     live.satelliteFrames.length - 1,
     Math.max(0, Math.round(state.timeline.cursor)),
   )
   const satelliteFrame =
-    state.viewMode === 'globe' &&
-    state.layers.satellite &&
-    live.satelliteFrames.length > 0
+    state.layers.satellite && live.satelliteFrames.length > 0
       ? live.satelliteFrames[Math.min(satIndex, live.satelliteFrames.length - 1)]
       : live.satelliteFrames.length > 0
         ? live.satelliteFrames[live.satelliteFrames.length - 1]
         : null
 
-  // Storm-view lightning: prefer feed events near reconstruction focus when available
-  const lastLightningId = useRef<string | null>(null)
-  useEffect(() => {
-    if (state.viewMode !== 'storm' || !state.layers.lightning) return
-    if (filteredLightningEvents.length > 0 && reconMode === 'cell') {
-      // Map timeline cursor into feed events by index cadence
-      const idx = Math.min(
-        filteredLightningEvents.length - 1,
-        Math.floor(
-          (state.timeline.cursor / Math.max(1, state.timeline.max)) *
-            filteredLightningEvents.length,
-        ),
-      )
-      const hit = filteredLightningEvents[idx]
-      if (hit && hit.id !== lastLightningId.current) {
-        lastLightningId.current = hit.id
-        setLightningEvent(hit)
-        setLightningToken((n) => n + 1)
+  const immersiveFocus = useMemo(() => {
+    if (selectedTrack) {
+      const head = selectedTrack.points[selectedTrack.points.length - 1]
+      return { lon: head.longitude, lat: head.latitude }
+    }
+    if (live.caseStudy) {
+      return {
+        lon: live.caseStudy.focus.longitude,
+        lat: live.caseStudy.focus.latitude,
       }
-      return
     }
-    const base = Date.parse(prototypeProvider.getBaseTimeIso())
-    const t = base + state.timeline.cursor * 1000
-    const windowMs = 900 * Math.max(1, state.timeline.speed)
-    const hit = syntheticLightning.find((e) => {
-      const et = Date.parse(e.observedAt)
-      return et >= t - windowMs && et <= t + windowMs
-    })
-    if (hit && hit.id !== lastLightningId.current) {
-      lastLightningId.current = hit.id
-      setLightningEvent(hit)
-      setLightningToken((n) => n + 1)
-    }
-  }, [
-    state.timeline.cursor,
-    state.timeline.max,
-    state.viewMode,
-    state.layers.lightning,
-    state.timeline.speed,
-    syntheticLightning,
-    filteredLightningEvents,
-    reconMode,
-  ])
-
-  const openStormView = useCallback(
-    (mode: 'prototype' | 'cell') => {
-      setReconMode(mode)
-      const recon = mapEnvironmentToReconstruction(
-        live.environment,
-        mode === 'cell' ? selectedTrack : null,
-      )
-      setState((s) => ({
-        ...s,
-        viewMode: 'storm',
-        cloudParams: recon.cloudParams,
-        flashFreq: recon.flashFreq,
-        statusMessage: recon.provenance.summary,
-        panelOpen: true,
-        timeline: {
-          playing: true,
-          cursor: 0,
-          speed: TIMELINE.defaultSpeed,
-          max: TIMELINE.durationSec,
-        },
-      }))
-      setPresetToken((n) => n + 1)
-    },
-    [live.environment, selectedTrack],
-  )
-
-  const enterStorm = useCallback(() => {
-    openStormView('prototype')
-  }, [openStormView])
+    return { lon: DEFAULT_FOCUS.envLongitude, lat: DEFAULT_FOCUS.envLatitude }
+  }, [selectedTrack, live.caseStudy])
 
   const pinSelectedCell = useCallback(() => {
     if (!selectedTrack) return
@@ -456,7 +351,6 @@ export default function App() {
       state.timeline.cursor,
     )
     const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack, pose)
-    setPinnedVolumeSnapshot(recon)
     setPinnedVolumeMode('cell')
     setFollowTrack(true)
     setCompareTrackIds((prev) => {
@@ -494,7 +388,6 @@ export default function App() {
     setFollowTrack(true)
     const pose = interpolateTrackAtCursor(top[0], live.radarFrames, state.timeline.cursor)
     const recon = mapEnvironmentToReconstruction(live.environment, top[0], pose)
-    setPinnedVolumeSnapshot(recon)
     setState((s) => ({
       ...s,
       layers: { ...s.layers, volume: true },
@@ -512,7 +405,7 @@ export default function App() {
 
   const clearCompare = useCallback(() => {
     setCompareTrackIds([])
-    setPinnedVolumeMode('prototype')
+    setPinnedVolumeMode(null)
     setChaseVolume(false)
     setState((s) => ({
       ...s,
@@ -523,43 +416,32 @@ export default function App() {
   const removeFromCompare = useCallback((trackId: string) => {
     setCompareTrackIds((prev) => {
       const next = prev.filter((id) => id !== trackId)
-      if (next.length === 0) setPinnedVolumeMode('prototype')
+      if (next.length === 0) setPinnedVolumeMode(null)
       return next
     })
   }, [])
 
-  const enterSelectedCell = useCallback(() => {
-    if (!selectedTrack) return
-    const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack)
-    setPinnedVolumeSnapshot(recon)
-    setPinnedVolumeMode('cell')
-    setCompareTrackIds((prev) =>
-      prev.includes(selectedTrack.id) ? prev : [...prev, selectedTrack.id].slice(-MAX_COMPARE_VOLUMES),
-    )
-    setFlyTarget({
-      lon: recon.longitude,
-      lat: recon.latitude,
-      height: 380_000,
-      token: Date.now(),
-    })
+  const enterImmersive = useCallback(() => {
     setState((s) => ({
       ...s,
-      layers: { ...s.layers, volume: true },
-      statusMessage: `Approaching derived cell ${selectedTrack.stormId}…`,
+      viewMode: 'immersive',
+      layers: { ...s.layers, clouds: true, precipitation: true },
+      statusMessage:
+        'Immersive atmosphere · model cloud-cover + RainViewer shafts · GeoJSON lightning only',
+      panelOpen: true,
     }))
-    window.setTimeout(() => openStormView('cell'), 1400)
-  }, [live.environment, openStormView, selectedTrack])
+    setEnterImmersiveToken((n) => n + 1)
+  }, [])
 
-  const returnGlobe = useCallback(() => {
+  const exitImmersive = useCallback(() => {
     const max = Math.max(0, live.radarFrames.length - 1)
-    setReconMode('prototype')
     setState((s) => ({
       ...s,
       viewMode: 'globe',
       statusMessage:
         live.radarFrames.length > 0
           ? `Live radar · ${live.radarFrames.length} frames · RainViewer`
-          : 'Returned to Earth view',
+          : 'Returned to exploration view',
       timeline: {
         playing: true,
         cursor: max,
@@ -569,23 +451,6 @@ export default function App() {
     }))
     setFlyHomeToken((n) => n + 1)
   }, [live.radarFrames.length])
-
-  const approachThenEnter = useCallback(() => {
-    if (state.viewMode === 'globe') {
-      const recon = mapEnvironmentToReconstruction(live.environment, null)
-      setPinnedVolumeSnapshot(recon)
-      setPinnedVolumeMode('prototype')
-      setFlyStormToken((n) => n + 1)
-      setState((s) => ({
-        ...s,
-        layers: { ...s.layers, volume: true },
-        statusMessage: 'Approaching prototype storm...',
-      }))
-      window.setTimeout(() => enterStorm(), 1400)
-      return
-    }
-    enterStorm()
-  }, [enterStorm, live.environment, state.viewMode])
 
   const setLayers = (partial: Partial<LayerState>) => {
     setState((s) => ({ ...s, layers: { ...s.layers, ...partial } }))
@@ -598,7 +463,7 @@ export default function App() {
       (id) => live.tracks.find((t) => t.id === id)?.stormId ?? id,
     )
     const observedAt =
-      state.viewMode === 'globe' && live.radarFrames.length > 0
+      live.radarFrames.length > 0
         ? live.radarFrames[
             Math.min(live.radarFrames.length - 1, Math.max(0, Math.round(state.timeline.cursor)))
           ]?.observedAt
@@ -623,14 +488,12 @@ export default function App() {
             height: flyTarget.height,
             oblique: flyTarget.oblique,
           }
-        : globeVolumeTarget
-          ? {
-              lon: globeVolumeTarget.longitude,
-              lat: globeVolumeTarget.latitude,
-              height: 220_000,
-              oblique: true,
-            }
-          : undefined,
+        : {
+            lon: immersiveFocus.lon,
+            lat: immersiveFocus.lat,
+            height: state.viewMode === 'immersive' ? 28_000 : 220_000,
+            oblique: true,
+          },
     })
   }, [
     live.tracks,
@@ -647,7 +510,7 @@ export default function App() {
     followTrack,
     chaseVolume,
     flyTarget,
-    globeVolumeTarget,
+    immersiveFocus,
   ])
 
   const applySceneSnapshot = useCallback(
@@ -672,37 +535,32 @@ export default function App() {
       const cursor = resolveTimelineCursor(snap, {
         frameCount: live.radarFrames.length,
         observedAts: live.radarFrames.map((f) => f.observedAt),
-        stormDurationSec: TIMELINE.durationSec,
+        stormDurationSec: 0,
       })
-      const max =
-        snap.viewMode === 'globe'
-          ? Math.max(0, live.radarFrames.length - 1)
-          : TIMELINE.durationSec
+      const max = Math.max(0, live.radarFrames.length - 1)
+      const pinnedMode =
+        snap.exploration.pinnedVolumeMode === 'cell' ? ('cell' as const) : null
 
       setFollowTrack(snap.exploration.followTrack)
       setChaseVolume(snap.exploration.chaseVolume)
       setCompareTrackIds(compareIds)
       setSelectedTrackId(selected)
-      setPinnedVolumeMode(snap.exploration.pinnedVolumeMode)
-      setReconMode(snap.viewMode === 'storm' ? (selected ? 'cell' : 'prototype') : 'prototype')
+      setPinnedVolumeMode(pinnedMode)
 
-      if (selected && snap.exploration.pinnedVolumeMode === 'cell') {
-        const track = live.tracks.find((t) => t.id === selected) ?? null
-        if (track) {
-          const pose =
-            snap.exploration.followTrack && live.radarFrames.length > 0
-              ? interpolateTrackAtCursor(track, live.radarFrames, cursor)
-              : null
-          setPinnedVolumeSnapshot(
-            mapEnvironmentToReconstruction(live.environment, track, pose),
-          )
-        }
-      }
+      const viewMode: 'globe' | 'immersive' =
+        snap.viewMode === 'immersive' ? 'immersive' : 'globe'
 
       setState((s) => ({
         ...s,
-        viewMode: snap.viewMode,
-        lightingMode: snap.lightingMode,
+        viewMode,
+        lightingMode:
+          snap.lightingMode === 'day' ||
+          snap.lightingMode === 'sunset' ||
+          snap.lightingMode === 'night' ||
+          snap.lightingMode === 'sunrise' ||
+          snap.lightingMode === 'followSun'
+            ? snap.lightingMode
+            : 'followSun',
         layers: { ...s.layers, ...snap.layers },
         reducedFlash: snap.exploration.reducedFlash,
         panelOpen: snap.exploration.panelOpen,
@@ -714,6 +572,10 @@ export default function App() {
         },
         statusMessage: `Restored scene snapshot · ${snap.exportedAt.replace('T', ' ').slice(0, 19)}Z`,
       }))
+
+      if (viewMode === 'immersive') {
+        setEnterImmersiveToken((n) => n + 1)
+      }
 
       if (snap.camera) {
         setFlyTarget({
@@ -737,12 +599,10 @@ export default function App() {
     [live.tracks, live.radarFrames, live.environment],
   )
 
-  // Apply URL/imported snapshot once radar (and preferably tracks) are ready.
   useEffect(() => {
     if (!pendingSnapshot || snapshotAppliedRef.current) return
     if (live.loading) return
-    if (pendingSnapshot.viewMode === 'globe' && live.radarFrames.length === 0) return
-    // Wait for track derivation when the snapshot references cells
+    if (live.radarFrames.length === 0) return
     const needsTracks =
       pendingSnapshot.exploration.compareStormIds.length > 0 ||
       pendingSnapshot.exploration.pinnedVolumeMode === 'cell'
@@ -860,8 +720,9 @@ export default function App() {
 
   const brandNote = useMemo(
     () =>
-      state.viewMode === 'globe'
-        ? compareTrackIds.length > 1
+      state.viewMode === 'immersive'
+        ? 'Immersive atmosphere · observation-driven clouds'
+        : compareTrackIds.length > 1
           ? `Comparing ${compareTrackIds.length} cell volumes · procedural`
           : pinnedVolumeMode === 'cell' && followTrack
             ? 'Volume follows derived track · procedural'
@@ -869,13 +730,9 @@ export default function App() {
               ? 'Georegistered cell volume · procedural'
               : live.trackSkillSummary.trackCount > 0
                 ? `Radar · tracks · skill mean ${Math.round(live.trackSkillSummary.meanComposite * 100)}%`
-                : 'Radar · tracks · georegistered volume'
-        : reconMode === 'cell'
-          ? 'Cell-informed reconstruction · not measured volume'
-          : 'Prototype storm · synthetic demonstration',
+                : 'Radar · global cloud field · RainViewer',
     [
       state.viewMode,
-      reconMode,
       pinnedVolumeMode,
       followTrack,
       compareTrackIds.length,
@@ -885,15 +742,12 @@ export default function App() {
   )
 
   const clockLabel = useMemo(() => {
-    if (state.viewMode === 'globe') {
-      if (!radarFrame) return live.loading ? 'Loading frames…' : 'No radar frames'
-      return radarFrame.observedAt.replace('T', ' ').replace('.000Z', 'Z')
-    }
-    return prototypeProvider
-      .simTimeToIso(state.timeline.cursor)
-      .replace('T', ' ')
-      .replace('.000Z', 'Z')
-  }, [state.viewMode, state.timeline.cursor, radarFrame, live.loading])
+    if (!radarFrame) return live.loading ? 'Loading frames…' : 'No radar frames'
+    return radarFrame.observedAt.replace('T', ' ').replace('.000Z', 'Z')
+  }, [radarFrame, live.loading])
+
+  const observedAtForSun =
+    syncObservedAt ?? radarFrame?.observedAt ?? live.caseStudy?.focusObservedAt ?? null
 
   return (
     <AppShell
@@ -906,8 +760,6 @@ export default function App() {
             lightingMode={state.lightingMode}
             layers={state.layers}
             reducedFlash={state.reducedFlash}
-            debugOpen={state.debugOpen}
-            cloudParams={state.cloudParams}
             satelliteAvailable={live.satelliteFrames.length > 0}
             tracksLoading={live.tracksLoading}
             lightningConfigured={live.lightningConfigured}
@@ -916,31 +768,19 @@ export default function App() {
             followTrack={followTrack}
             chaseVolume={chaseVolume}
             compareCount={compareTrackIds.length}
+            cloudFieldLoading={live.cloudFieldLoading}
             hasSelectedTrack={Boolean(selectedTrack)}
             onLightingMode={(lightingMode: LightingMode) => setState((s) => ({ ...s, lightingMode }))}
             onLayers={setLayers}
-            onPreset={(cameraPreset: StormCameraPreset) => {
-              setState((s) => ({ ...s, cameraPreset }))
-              setPresetToken((n) => n + 1)
-            }}
             onReducedFlash={(reducedFlash) => setState((s) => ({ ...s, reducedFlash }))}
-            onToggleDebug={() => setState((s) => ({ ...s, debugOpen: !s.debugOpen }))}
-            onCloudParams={(partial: Partial<CloudParams>) =>
-              setState((s) => ({ ...s, cloudParams: { ...s.cloudParams, ...partial } }))
-            }
-            onEnterStorm={approachThenEnter}
+            onEnterImmersive={enterImmersive}
             onPinSelectedCell={pinSelectedCell}
-            onEnterSelectedCell={enterSelectedCell}
             onCompareTop={compareTopTracks}
             onClearCompare={clearCompare}
             onFollowTrack={setFollowTrack}
             onChaseVolume={setChaseVolume}
-            onReturnGlobe={returnGlobe}
+            onExitImmersive={exitImmersive}
             onTogglePanel={() => setState((s) => ({ ...s, panelOpen: !s.panelOpen }))}
-            onDemoLightning={() => {
-              setLightningEvent(null)
-              setLightningToken((n) => n + 1)
-            }}
             onRefreshWeather={live.refresh}
           />
           <SceneShareControls
@@ -957,11 +797,7 @@ export default function App() {
             environment={live.environment}
             tracks={live.tracks}
             selectedTrackId={selectedTrackId}
-            reconstruction={
-              state.viewMode === 'storm'
-                ? reconstruction
-                : globeVolumeTarget ?? previewReconstruction
-            }
+            reconstruction={globeVolumeTarget ?? previewReconstruction}
             compareVolumes={compareVolumes}
             trackSkills={live.trackSkills}
             trackSkillSummary={live.trackSkillSummary}
@@ -1000,15 +836,17 @@ export default function App() {
             followTrack={followTrack}
             loading={live.loading}
             error={live.error}
+            cloudFieldCount={live.cloudField.length}
+            cloudFieldLoading={live.cloudFieldLoading}
+            cloudFieldError={live.cloudFieldError}
             onClose={() => setState((s) => ({ ...s, panelOpen: false }))}
-            onEnterStorm={approachThenEnter}
+            onEnterImmersive={enterImmersive}
             onPinSelectedCell={addSelectedToCompare}
-            onEnterSelectedCell={enterSelectedCell}
             onFollowTrack={setFollowTrack}
             onCompareTop={compareTopTracks}
             onClearCompare={clearCompare}
             onRemoveCompare={removeFromCompare}
-            onReturnGlobe={returnGlobe}
+            onExitImmersive={exitImmersive}
             onSelectTrack={setSelectedTrackId}
             onLightningFilterChange={setLightningFilter}
             onLoadLightningSample={() => {
@@ -1156,19 +994,13 @@ export default function App() {
             timeline={state.timeline}
             clockLabel={clockLabel}
             note={
-              state.viewMode === 'globe'
-                ? followTrack && pinnedVolumeMode === 'cell'
-                  ? compareTrackIds.length > 1
-                    ? 'Scrubs radar frames and walks all compare volumes along their derived tracks.'
-                    : 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
-                  : 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product.'
-                : reconMode === 'cell'
-                  ? 'Prototype animation clock for a cell-informed reconstruction — not observation time.'
-                  : 'Controls synthetic storm animation — not real-time weather observations.'
+              followTrack && pinnedVolumeMode === 'cell'
+                ? compareTrackIds.length > 1
+                  ? 'Scrubs radar frames and walks all compare volumes along their derived tracks.'
+                  : 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
+                : 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product. Sun lighting follows observation UTC when Follow sun is active.'
             }
-            badge={
-              state.viewMode === 'globe' ? 'Observation time' : 'Prototype simulation time'
-            }
+            badge="Observation time"
             onChange={(partial) =>
               setState((s) => ({ ...s, timeline: { ...s.timeline, ...partial } }))
             }
@@ -1177,7 +1009,7 @@ export default function App() {
                 ...s,
                 timeline: {
                   ...s.timeline,
-                  cursor: s.viewMode === 'globe' ? s.timeline.max : 0,
+                  cursor: s.timeline.max,
                   playing: true,
                 },
               }))
@@ -1186,44 +1018,36 @@ export default function App() {
         </>
       }
     >
-      {state.viewMode === 'globe' ? (
-        <GlobeView
-          active
-          requestFlyToStorm={flyStormToken}
-          requestFlyHome={flyHomeToken}
-          flyTarget={flyTarget}
-          onEnterStorm={enterStorm}
-          onTrackSelect={setSelectedTrackId}
-          radarFrame={radarFrame}
-          satelliteFrame={satelliteFrame}
-          radarVisible={state.layers.radar}
-          satelliteVisible={state.layers.satellite}
-          tracks={live.tracks}
-          tracksVisible={state.layers.tracks}
-          selectedTrackId={selectedTrackId}
-          trackSkillById={trackSkillById}
-          lightningEvents={filteredLightningEvents}
-          lightningVisible={state.layers.lightningObs}
-          volumeTarget={globeVolumeTarget}
-          volumeTargets={globeVolumeTargets}
-          volumeVisible={state.layers.volume}
-        />
-      ) : (
-        <StormView
-          active
-          paused={!state.timeline.playing}
-          lightingMode={state.lightingMode}
-          layers={state.layers}
-          cloudParams={state.cloudParams}
-          flashFreq={state.flashFreq}
-          simTime={state.timeline.cursor}
-          reducedFlash={state.reducedFlash}
-          cameraPreset={state.cameraPreset}
-          presetToken={presetToken}
-          lightningEvent={lightningEvent}
-          lightningToken={lightningToken}
-        />
-      )}
+      <GlobeView
+        active
+        immersive={state.viewMode === 'immersive'}
+        requestFlyHome={flyHomeToken}
+        requestEnterImmersive={enterImmersiveToken}
+        immersiveFocus={immersiveFocus}
+        flyTarget={flyTarget}
+        onEnterImmersive={enterImmersive}
+        onTrackSelect={setSelectedTrackId}
+        radarFrame={radarFrame}
+        satelliteFrame={satelliteFrame}
+        radarVisible={state.layers.radar}
+        satelliteVisible={state.layers.satellite}
+        tracks={live.tracks}
+        tracksVisible={state.layers.tracks}
+        selectedTrackId={selectedTrackId}
+        trackSkillById={trackSkillById}
+        lightningEvents={filteredLightningEvents}
+        lightningVisible={state.layers.lightningObs && !state.reducedFlash ? true : state.layers.lightningObs}
+        volumeTarget={globeVolumeTarget}
+        volumeTargets={globeVolumeTargets}
+        volumeVisible={state.layers.volume}
+        cloudField={live.cloudField}
+        cloudsVisible={state.layers.clouds}
+        precipitationVisible={state.layers.precipitation}
+        lightingMode={state.lightingMode}
+        observedAt={observedAtForSun}
+        focusLon={immersiveFocus.lon}
+        focusLat={immersiveFocus.lat}
+      />
     </AppShell>
   )
 }

@@ -1,13 +1,20 @@
 export * from './types/provenance'
 export * from './types/observations'
 export * from './providers/types'
-export { PrototypeWeatherProvider, prototypeProvider } from './adapters/PrototypeAdapter'
 export {
   AustralianWeatherProvider,
   australianWeatherProvider,
 } from './adapters/AustralianWeatherAdapter'
 export { fetchOpenMeteoEnvironment } from './adapters/OpenMeteoAdapter'
 export type { EnvironmentalProfile } from './adapters/OpenMeteoAdapter'
+export {
+  fetchCloudCoverGrid,
+  samplesToCloudFieldPoints,
+  type CloudBand,
+  type CloudCoverSample,
+  type CloudFieldPoint,
+  type CloudTypeProxy,
+} from './adapters/cloudCoverGrid'
 export { deriveTracksFromRadarFrames } from './reconstruction/deriveTracks'
 export {
   mapEnvironmentToReconstruction,

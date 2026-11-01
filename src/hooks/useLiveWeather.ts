@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PROTOTYPE_STORM } from '../config/app'
+import { DEFAULT_FOCUS } from '../config/app'
 import { RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
 import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
   createTruthCellsProviderFromEnv,
+  fetchCloudCoverGrid,
   fetchOpenMeteoEnvironment,
   matchTracksToTruth,
   sampleLightningUrl,
   sampleTruthCellsUrl,
+  samplesToCloudFieldPoints,
   scoreTracks,
   summarizeTrackSkills,
   summarizeTrackTruth,
   truthCellsFromTracks,
+  type CloudFieldPoint,
   type LightningObservation,
   type RadarObservation,
   type SatelliteObservation,
@@ -99,6 +102,9 @@ export interface LiveWeatherState {
     text: string,
     opts: { licenceNote: string; sourceFilename?: string; replace?: boolean },
   ) => { ok: boolean; message: string }
+  cloudField: CloudFieldPoint[]
+  cloudFieldLoading: boolean
+  cloudFieldError: string | null
   clearCaseStudy: () => void
   refresh: () => void
 }
@@ -135,6 +141,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [caseStudyShelf, setCaseStudyShelf] = useState<CaseStudyShelfListItem[]>(() =>
     listCaseStudyShelf(),
   )
+  const [cloudField, setCloudField] = useState<CloudFieldPoint[]>([])
+  const [cloudFieldLoading, setCloudFieldLoading] = useState(false)
+  const [cloudFieldError, setCloudFieldError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const [lightningTick, setLightningTick] = useState(0)
   const [truthTick, setTruthTick] = useState(0)
@@ -146,15 +155,13 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     ;(async () => {
       setLoading(true)
       try {
+        const focusLat = caseStudy?.focus.latitude ?? DEFAULT_FOCUS.envLatitude
+        const focusLon = caseStudy?.focus.longitude ?? DEFAULT_FOCUS.envLongitude
         const [avail, radar, satellite, env, lghtMeta] = await Promise.all([
           australianWeatherProvider.getAvailability(),
           australianWeatherProvider.getRadar({}),
           australianWeatherProvider.getSatellite({}),
-          fetchOpenMeteoEnvironment(
-            PROTOTYPE_STORM.latitude,
-            PROTOTYPE_STORM.longitude,
-            controller.signal,
-          ),
+          fetchOpenMeteoEnvironment(focusLat, focusLon, controller.signal),
           lightningProvider.getAvailability(controller.signal),
         ])
         if (cancelled) return
@@ -176,7 +183,30 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       cancelled = true
       controller.abort()
     }
-  }, [tick, lightningProvider, lightningTick])
+  }, [tick, lightningProvider, lightningTick, caseStudy?.focus.latitude, caseStudy?.focus.longitude])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+    setCloudFieldLoading(true)
+    setCloudFieldError(null)
+    fetchCloudCoverGrid(controller.signal)
+      .then((samples) => {
+        if (cancelled) return
+        setCloudField(samplesToCloudFieldPoints(samples))
+        setCloudFieldLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setCloudField([])
+        setCloudFieldError(err instanceof Error ? err.message : 'Cloud cover grid failed')
+        setCloudFieldLoading(false)
+      })
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [tick])
 
   useEffect(() => {
     if (!enableTracks) {
@@ -622,6 +652,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     deleteCaseStudyShelfEntry,
     backupCaseStudyShelf,
     restoreCaseStudyShelfText,
+    cloudField,
+    cloudFieldLoading,
+    cloudFieldError,
     clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
   }
