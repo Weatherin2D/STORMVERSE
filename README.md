@@ -94,11 +94,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Optional sync of globe lightning to the active radar observation window
 - Missing feeds stay gaps — never filled with fabricated observations
 
-### 14 — Time-aligned multi-sensor case study (current)
+### 14 — Time-aligned multi-sensor case study
 - Bundled NSW example pack: reference tracks + lightning + truth on one clock
 - Load / clear from the info panel; live radar stays independent
 - Lightning time sync modes: off / radar clock / case-study clock
 - Case-study sensors are fixtures — not licensed BoM/commercial archives
+
+### 15 — Schematic RHI (current)
+- Range–height sketch along the selected derived or case-study track
+- Tops/intensity from CAPE, precip hint, and cell confidence (not dBZ)
+- Optional lightning marks projected into a track corridor
+- Explicitly **not** a measured radar volume or BoM RHI product
 
 ## Scientific integrity
 
@@ -112,6 +118,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Cross-product coherence | Exploratory readiness / co-location hint — not multi-sensor skill |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
+| Schematic RHI | **Procedural** range–height sketch — not measured reflectivity |
 | Globe volume / compare set | **Procedural**, georegistered |
 | Scene snapshot / bookmark | UI/state only — does not freeze live weather fields |
 | Immersive 3D storm | **Procedural** local scene |
@@ -126,12 +133,13 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Track “skill”, truth-association, and cross-product scores are not formal verification products
 - Sample lightning / truth / case-study packs are plumbing fixtures — replace with licensed catalogues
 - Case-study clock and live radar times are independent by design
+- Schematic RHI colour bands are not calibrated dBZ
 - Tracks empty when Australia mosaics lack precip (unless a case study is loaded)
 
 ## Next ideas
 
 1. Wire lightning + truth + case-study loaders to licensed commercial/BoM products when available
-2. Radar volume / RHI products under proper licensing
+2. Licensed radar volume / true RHI products under proper licensing
 3. Multi-case study library with documented archive licences
 
 Do not scrape restricted services. Respect provider terms and licensing.

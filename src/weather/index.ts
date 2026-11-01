@@ -58,6 +58,12 @@ export {
   fetchCaseStudyPack,
 } from './caseStudy/parseCaseStudy'
 export {
+  buildSchematicRhi,
+  type SchematicRhiColumn,
+  type SchematicRhiLightningMark,
+  type SchematicRhiSlice,
+} from './reconstruction/schematicRhi'
+export {
   CASE_STUDY_VERSION,
   type CaseStudyMeta,
   type CaseStudyPack,

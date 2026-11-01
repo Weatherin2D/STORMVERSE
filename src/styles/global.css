@@ -860,6 +860,44 @@ button {
   stroke-width: 1.5;
 }
 
+.schematic-rhi {
+  margin: 12px 0 14px;
+}
+
+.schematic-rhi h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.schematic-rhi svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.schematic-rhi .rhi-tick {
+  fill: rgba(232, 236, 245, 0.55);
+}
+
+.schematic-rhi .rhi-bolt {
+  stroke: rgba(245, 230, 166, 0.35);
+  stroke-width: 1;
+}
+
+.schematic-rhi .rhi-bolt-cg {
+  fill: #f0d060;
+}
+
+.schematic-rhi .rhi-bolt-ic {
+  fill: #9eb6d4;
+}
+
 @media (max-width: 900px) {
   .status-line {
     top: auto;

@@ -19,6 +19,7 @@ import type {
 import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapter'
 import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
+import { SchematicRhi } from '../scientific/SchematicRhi'
 import { TrackSkillCard } from '../scientific/TrackSkillCard'
 import { TrackVerificationCard } from '../scientific/TrackVerificationCard'
 import { LightningQualityCard } from '../scientific/LightningQualityCard'
@@ -500,6 +501,12 @@ export function InfoPanel({
             radarIntensityHint={selected?.confidence ?? 0.35}
           />
 
+          <SchematicRhi
+            track={selected}
+            environment={environment}
+            lightning={lightningEvents}
+          />
+
           <p className="provenance">
             <strong>Provider:</strong> {australianWeatherProvider.displayName}
           </p>
@@ -541,6 +548,11 @@ export function InfoPanel({
             environment={environment}
             selectedTrack={selected}
             radarIntensityHint={reconstruction?.drivers.cellConfidence ?? 0.55}
+          />
+          <SchematicRhi
+            track={selected}
+            environment={environment}
+            lightning={lightningEvents}
           />
           <button type="button" onClick={onReturnGlobe}>
             Return to Earth
