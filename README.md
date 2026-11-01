@@ -158,7 +158,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Rain shafts | **Derived** cues at RainViewer-driven cell heads — not measured volumes |
-| Global cloud field | Earth-wide mosaic footprint + MeteoLab-inspired ray-marched volumes (soft bases, billows, ice wisps — visual style only; heights are heuristics, not retrieved CTH/COT); Open-Meteo cover fills gaps / fallback |
+| Global cloud field | Earth-wide mosaic footprint + MeteoLab-inspired ray-marched towers/anvils (cauliflower billows, cool shadowed bases, bright lit tops — daytime visual target; sunset/night still follow the solar clock; heights are heuristics, not retrieved CTH/COT) |
 | Satellite IR | Processed RainViewer infrared mosaic (preferred cloud-shape source when published) |
 | Cell tracks | Derived heuristic (low confidence) |
 | Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
