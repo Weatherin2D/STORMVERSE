@@ -23,9 +23,11 @@ Copy `.env.example` → `.env`:
 ```bash
 VITE_CESIUM_ION_TOKEN=           # optional Cesium imagery/terrain
 VITE_LIGHTNING_GEOJSON_URL=      # optional licensed lightning FeatureCollection
+VITE_TRUTH_CELLS_GEOJSON_URL=    # optional licensed truth-cell FeatureCollection
 ```
 
-Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).
+Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).  
+Truth-cell example schema: [`public/samples/truth-cells.example.geojson`](public/samples/truth-cells.example.geojson).
 
 ### Scene snapshots & bookmarks
 
@@ -68,10 +70,16 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Copy URL hash share links; open/import to restore
 - Live radar and tracks still refresh from providers on restore
 
-### 10 — Named scene bookmarks (current)
+### 10 — Named scene bookmarks
 - Save named exploration scenes to local browser storage
 - Gallery in the info panel: restore, rename, delete
 - Quick **Save bookmark** in the share control dock (auto-named)
+
+### 11 — Track verification hooks (current)
+- Optional GeoJSON truth-cell catalogue (`VITE_TRUTH_CELLS_GEOJSON_URL`)
+- Associate derived tracks by `stormId` or gated nearest neighbour
+- Load bundled sample / export current tracks as a stand-in template
+- Association scores are geometric gates — not published verification skill
 
 ## Scientific integrity
 
@@ -80,6 +88,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Radar mosaic | Processed RainViewer imagery |
 | Cell tracks | Derived heuristic (low confidence) |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
+| Track–truth association | Optional gated match to user catalogue — not BoM skill |
 | CAPE / CIN | Model (Open-Meteo) |
 | Cross-section | Schematic reconstruction aid |
 | Globe volume / compare set | **Procedural**, georegistered |
@@ -93,14 +102,15 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - No bundled live lightning network (configure your own licensed URL)
 - Snapshots and bookmarks cannot guarantee the same cells exist after catalogue refresh
 - Bookmarks are device-local (not synced); clearing site data removes them
-- Track “skill” scores have no ground-truth reference
+- Track “skill” and truth-association scores are not formal verification products
+- Sample truth cells are plumbing fixtures — replace with a licensed catalogue
 - Tracks empty when Australia mosaics lack precip
 
 ## Next ideas
 
 1. Licensed commercial/BoM lightning with quality metadata
 2. Radar volume / RHI products under proper licensing
-3. Optional verification hooks when a licensed truth cell product is available
+3. Wire verification hooks to a licensed truth-cell product when available
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

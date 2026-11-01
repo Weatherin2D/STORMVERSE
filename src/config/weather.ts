@@ -26,3 +26,15 @@ export const LIGHTNING_FEED = {
   envKey: 'VITE_LIGHTNING_GEOJSON_URL',
   samplePath: '/samples/lightning.example.geojson',
 }
+
+/**
+ * Optional licensed (or sample) truth-cell FeatureCollection for verification hooks.
+ * Point features with observedAt / stormId / source. See public/samples/truth-cells.example.geojson.
+ */
+export const TRUTH_CELLS_FEED = {
+  envKey: 'VITE_TRUTH_CELLS_GEOJSON_URL',
+  samplePath: '/samples/truth-cells.example.geojson',
+  /** Spatial / temporal association gates used by track–truth matching. */
+  maxDistanceKm: 50,
+  maxTimeDeltaSec: 90 * 60,
+}

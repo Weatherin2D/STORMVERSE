@@ -31,3 +31,20 @@ export {
   GeoJsonLightningProvider,
   createLightningProviderFromEnv,
 } from './adapters/GeoJsonLightningAdapter'
+export {
+  GeoJsonTruthCellsProvider,
+  createTruthCellsProviderFromEnv,
+  sampleTruthCellsUrl,
+  tracksToTruthGeoJson,
+  downloadTruthCellsTemplate,
+  truthCellsFromTracks,
+} from './adapters/GeoJsonTruthCellsAdapter'
+export {
+  haversineKm,
+  matchTracksToTruth,
+  summarizeTrackTruth,
+  type TruthCell,
+  type TrackTruthMatch,
+  type TrackTruthSummary,
+  type TruthMatchOptions,
+} from './reconstruction/trackTruth'

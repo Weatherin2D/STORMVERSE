@@ -534,6 +534,57 @@ button {
   border-radius: 3px;
 }
 
+.track-verify-card .verify-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+
+.track-verify-card .verify-actions button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.track-verify-card .verify-error {
+  color: var(--danger);
+}
+
+.track-verify-card .verify-match {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.track-verify-card .verify-match.associated {
+  border-color: rgba(125, 154, 122, 0.45);
+}
+
+.track-verify-card .verify-match.unmatched {
+  border-color: rgba(154, 107, 107, 0.4);
+}
+
+.track-verify-card .verify-match .skill-label {
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.track-verify-card .verify-match.associated .skill-label {
+  color: #8fbf7f;
+}
+
+.track-verify-card .verify-match.unmatched .skill-label {
+  color: #e09a7a;
+}
+
 .scene-share {
   position: relative;
 }

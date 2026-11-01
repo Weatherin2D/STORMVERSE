@@ -22,6 +22,7 @@ import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
 import {
+  downloadTruthCellsTemplate,
   interpolateTrackAtCursor,
   mapEnvironmentToReconstruction,
   prototypeProvider,
@@ -862,6 +863,14 @@ export default function App() {
             compareVolumes={compareVolumes}
             trackSkills={live.trackSkills}
             trackSkillSummary={live.trackSkillSummary}
+            trackTruthMatch={
+              live.trackTruthMatches.find((m) => m.trackId === selectedTrackId) ?? null
+            }
+            trackTruthSummary={live.trackTruthSummary}
+            truthConfigured={live.truthConfigured}
+            truthLoading={live.truthLoading}
+            truthError={live.truthError}
+            truthSourceLabel={live.truthSourceLabel}
             bookmarks={bookmarks}
             radarLabel={
               radarFrame ? `${radarFrame.observedAt} · ${radarFrame.provenance.kind}` : null
@@ -883,6 +892,45 @@ export default function App() {
             onRemoveCompare={removeFromCompare}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
+            canUseTracksAsTruth={live.tracks.length > 0}
+            onLoadTruthSample={() => {
+              live.loadTruthSample()
+              setState((s) => ({
+                ...s,
+                panelOpen: true,
+                statusMessage: 'Loading sample truth-cell catalogue (example only)',
+              }))
+            }}
+            onUseTracksAsTruth={() => {
+              live.loadTruthFromTracks()
+              setState((s) => ({
+                ...s,
+                panelOpen: true,
+                statusMessage:
+                  'Stand-in truth loaded from derived tracks — not independent verification',
+              }))
+            }}
+            onClearTruthCatalogue={() => {
+              live.clearTruthCatalogue()
+              setState((s) => ({
+                ...s,
+                statusMessage: 'Truth-cell catalogue cleared',
+              }))
+            }}
+            onExportTruthTemplate={() => {
+              if (live.tracks.length === 0) {
+                setState((s) => ({
+                  ...s,
+                  statusMessage: 'No derived tracks to export as truth template',
+                }))
+                return
+              }
+              downloadTruthCellsTemplate(live.tracks)
+              setState((s) => ({
+                ...s,
+                statusMessage: `Exported ${live.tracks.length} track midpoints as truth template`,
+              }))
+            }}
             onRefreshBookmarks={refreshBookmarks}
             onSaveBookmark={saveBookmarkNamed}
             onRestoreBookmark={restoreBookmark}

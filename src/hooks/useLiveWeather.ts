@@ -1,18 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PROTOTYPE_STORM } from '../config/app'
-import { RAINVIEWER } from '../config/weather'
+import { RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
 import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
+  createTruthCellsProviderFromEnv,
   fetchOpenMeteoEnvironment,
+  matchTracksToTruth,
+  sampleTruthCellsUrl,
   scoreTracks,
   summarizeTrackSkills,
+  summarizeTrackTruth,
+  truthCellsFromTracks,
   type LightningObservation,
   type RadarObservation,
   type SatelliteObservation,
   type StormTrack,
   type TrackSkillScore,
   type TrackSkillSummary,
+  type TrackTruthMatch,
+  type TrackTruthSummary,
+  type TruthCell,
   type WeatherObservationMeta,
 } from '../weather'
 import type { EnvironmentalProfile } from '../weather/adapters/OpenMeteoAdapter'
@@ -31,11 +39,22 @@ export interface LiveWeatherState {
   trackSkillSummary: TrackSkillSummary
   lightningEvents: LightningObservation[]
   lightningConfigured: boolean
+  truthCells: TruthCell[]
+  truthConfigured: boolean
+  truthLoading: boolean
+  truthError: string | null
+  truthSourceLabel: string | null
+  trackTruthMatches: TrackTruthMatch[]
+  trackTruthSummary: TrackTruthSummary
+  loadTruthSample: () => void
+  loadTruthFromTracks: () => void
+  clearTruthCatalogue: () => void
   refresh: () => void
 }
 
 export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const lightningProvider = useMemo(() => createLightningProviderFromEnv(), [])
+  const truthProvider = useMemo(() => createTruthCellsProviderFromEnv(), [])
   const [loading, setLoading] = useState(true)
   const [tracksLoading, setTracksLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +64,14 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [environment, setEnvironment] = useState<EnvironmentalProfile | null>(null)
   const [tracks, setTracks] = useState<StormTrack[]>([])
   const [lightningEvents, setLightningEvents] = useState<LightningObservation[]>([])
+  const [truthCells, setTruthCells] = useState<TruthCell[]>([])
+  const [truthLoading, setTruthLoading] = useState(false)
+  const [truthError, setTruthError] = useState<string | null>(null)
+  const [truthSourceLabel, setTruthSourceLabel] = useState<string | null>(() =>
+    truthProvider.getUrl(),
+  )
   const [tick, setTick] = useState(0)
+  const [truthTick, setTruthTick] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -164,6 +190,62 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     return () => window.clearInterval(id)
   }, [])
 
+  useEffect(() => {
+    if (!truthProvider.configured()) {
+      setTruthCells([])
+      setTruthError(null)
+      setTruthLoading(false)
+      setTruthSourceLabel(null)
+      return
+    }
+    const controller = new AbortController()
+    let cancelled = false
+    setTruthLoading(true)
+    ;(async () => {
+      try {
+        const cells = await truthProvider.getTruthCells(controller.signal)
+        if (cancelled) return
+        setTruthCells(cells)
+        setTruthError(null)
+        setTruthSourceLabel(truthProvider.getUrl())
+      } catch (err) {
+        if (cancelled) return
+        setTruthCells([])
+        setTruthError(err instanceof Error ? err.message : 'Truth catalogue failed')
+      } finally {
+        if (!cancelled) setTruthLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [truthProvider, truthTick])
+
+  const loadTruthSample = useCallback(() => {
+    truthProvider.setUrl(sampleTruthCellsUrl())
+    setTruthTick((n) => n + 1)
+  }, [truthProvider])
+
+  const loadTruthFromTracks = useCallback(() => {
+    // Stand-in catalogue: detach from URL provider so export midpoints stay sticky
+    // until cleared (even if radar tracks refresh).
+    truthProvider.setUrl(null)
+    const cells = truthCellsFromTracks(tracks)
+    setTruthCells(cells)
+    setTruthError(cells.length === 0 ? 'No derived tracks to use as stand-in truth' : null)
+    setTruthSourceLabel(cells.length > 0 ? 'in-memory · derived-track export (stand-in)' : null)
+    setTruthLoading(false)
+  }, [truthProvider, tracks])
+
+  const clearTruthCatalogue = useCallback(() => {
+    truthProvider.setUrl(null)
+    setTruthCells([])
+    setTruthError(null)
+    setTruthSourceLabel(null)
+    setTruthTick((n) => n + 1)
+  }, [truthProvider])
+
   const trackSkills = useMemo(
     () => scoreTracks(tracks, radarFrames),
     [tracks, radarFrames],
@@ -171,6 +253,24 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const trackSkillSummary = useMemo(
     () => summarizeTrackSkills(trackSkills),
     [trackSkills],
+  )
+
+  const trackTruthMatches = useMemo(
+    () =>
+      matchTracksToTruth(tracks, truthCells, {
+        maxDistanceKm: TRUTH_CELLS_FEED.maxDistanceKm,
+        maxTimeDeltaSec: TRUTH_CELLS_FEED.maxTimeDeltaSec,
+      }),
+    [tracks, truthCells],
+  )
+  const trackTruthSummary = useMemo(
+    () =>
+      summarizeTrackTruth(
+        trackTruthMatches,
+        truthCells.length,
+        truthProvider.configured() || truthCells.length > 0,
+      ),
+    [trackTruthMatches, truthCells.length, truthProvider],
   )
 
   return {
@@ -186,6 +286,16 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     trackSkillSummary,
     lightningEvents,
     lightningConfigured: lightningProvider.configured(),
+    truthCells,
+    truthConfigured: truthProvider.configured() || truthCells.length > 0,
+    truthLoading,
+    truthError,
+    truthSourceLabel,
+    trackTruthMatches,
+    trackTruthSummary,
+    loadTruthSample,
+    loadTruthFromTracks,
+    clearTruthCatalogue,
     refresh: () => setTick((n) => n + 1),
   }
 }

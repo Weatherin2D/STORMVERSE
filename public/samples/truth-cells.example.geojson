@@ -1,0 +1,42 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.12, -32.45] },
+      "properties": {
+        "id": "example-truth-nsw-1",
+        "stormId": "example-cell-nsw-a",
+        "observedAt": "2024-11-15T06:10:00.000Z",
+        "source": "example-not-live",
+        "label": "NSW sample A",
+        "example": true,
+        "note": "Example only — replace with a licensed truth-cell product via VITE_TRUTH_CELLS_GEOJSON_URL"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2, -33.85] },
+      "properties": {
+        "id": "example-truth-syd-1",
+        "stormId": "example-cell-syd-a",
+        "observedAt": "2024-11-15T06:15:00.000Z",
+        "source": "example-not-live",
+        "label": "Sydney sample",
+        "example": true,
+        "note": "Example only — coordinates are illustrative plumbing fixtures"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [145.0, -37.8] },
+      "properties": {
+        "id": "example-truth-vic-1",
+        "observedAt": "2024-11-15T06:20:00.000Z",
+        "source": "example-not-live",
+        "label": "VIC sample",
+        "example": true
+      }
+    }
+  ]
+}

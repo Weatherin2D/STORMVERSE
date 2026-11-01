@@ -6,12 +6,15 @@ import type {
   StormTrack,
   TrackSkillScore,
   TrackSkillSummary,
+  TrackTruthMatch,
+  TrackTruthSummary,
   WeatherObservationMeta,
 } from '../../weather'
 import type { EnvironmentalProfile } from '../../weather/adapters/OpenMeteoAdapter'
 import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
 import { TrackSkillCard } from '../scientific/TrackSkillCard'
+import { TrackVerificationCard } from '../scientific/TrackVerificationCard'
 import { SceneBookmarkGallery } from '../controls/SceneBookmarkGallery'
 
 interface InfoPanelProps {
@@ -25,6 +28,12 @@ interface InfoPanelProps {
   compareVolumes: ReconstructionTarget[]
   trackSkills: TrackSkillScore[]
   trackSkillSummary: TrackSkillSummary | null
+  trackTruthMatch: TrackTruthMatch | null
+  trackTruthSummary: TrackTruthSummary | null
+  truthConfigured: boolean
+  truthLoading: boolean
+  truthError: string | null
+  truthSourceLabel: string | null
   bookmarks: SceneBookmarkListItem[]
   radarLabel: string | null
   tracksLoading: boolean
@@ -44,6 +53,11 @@ interface InfoPanelProps {
   onRemoveCompare: (trackId: string) => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
+  canUseTracksAsTruth: boolean
+  onLoadTruthSample: () => void
+  onUseTracksAsTruth: () => void
+  onClearTruthCatalogue: () => void
+  onExportTruthTemplate: () => void
   onRefreshBookmarks: () => void
   onSaveBookmark: (name: string) => { ok: boolean; message: string }
   onRestoreBookmark: (id: string) => { ok: boolean; message: string }
@@ -62,6 +76,12 @@ export function InfoPanel({
   compareVolumes,
   trackSkills,
   trackSkillSummary,
+  trackTruthMatch,
+  trackTruthSummary,
+  truthConfigured,
+  truthLoading,
+  truthError,
+  truthSourceLabel,
   bookmarks,
   radarLabel,
   tracksLoading,
@@ -81,6 +101,11 @@ export function InfoPanel({
   onRemoveCompare,
   onReturnGlobe,
   onSelectTrack,
+  canUseTracksAsTruth,
+  onLoadTruthSample,
+  onUseTracksAsTruth,
+  onClearTruthCatalogue,
+  onExportTruthTemplate,
   onRefreshBookmarks,
   onSaveBookmark,
   onRestoreBookmark,
@@ -260,6 +285,21 @@ export function InfoPanel({
           />
 
           <TrackSkillCard score={selectedSkill} summary={trackSkillSummary} />
+
+          <TrackVerificationCard
+            configured={truthConfigured}
+            loading={truthLoading}
+            error={truthError}
+            sourceLabel={truthSourceLabel}
+            summary={trackTruthSummary}
+            selected={trackTruthMatch}
+            disabled={loading}
+            canUseTracks={canUseTracksAsTruth}
+            onLoadSample={onLoadTruthSample}
+            onUseTracksAsTruth={onUseTracksAsTruth}
+            onClear={onClearTruthCatalogue}
+            onExportTemplate={onExportTruthTemplate}
+          />
 
           {reconstruction && selected && (
             <div className="availability">
