@@ -28,11 +28,14 @@ export interface GlobalCloudFieldHandle {
 }
 
 const BAND_RGB: Record<CloudFieldPoint['band'], [number, number, number]> = {
-  low: [220, 226, 236],
-  mid: [210, 218, 232],
-  high: [236, 242, 255],
+  low: [228, 232, 240],
+  mid: [236, 240, 248],
+  high: [245, 248, 255],
 }
 
+/**
+ * Soft irregular cumulus blotches (MeteoLab-like soft edges), not hard spheres.
+ */
 function makeCloudTexture(seed: number): HTMLCanvasElement {
   const size = 256
   const canvas = document.createElement('canvas')
@@ -41,32 +44,31 @@ function makeCloudTexture(seed: number): HTMLCanvasElement {
   const ctx = canvas.getContext('2d')!
   ctx.clearRect(0, 0, size, size)
 
-  const blobs = 7 + (seed % 4)
-  for (let i = 0; i < blobs; i++) {
-    const t = (i + 1) / blobs
-    const cx = size * (0.28 + ((seed * 17 + i * 37) % 100) / 220)
-    const cy = size * (0.3 + ((seed * 29 + i * 19) % 100) / 200)
-    const r = size * (0.22 + t * 0.28)
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
-    g.addColorStop(0, `rgba(255,255,255,${0.55 - t * 0.25})`)
-    g.addColorStop(0.45, `rgba(235,240,250,${0.28 - t * 0.12})`)
+  // Layered irregular lobes — cauliflower / soft cumulus, not a disc.
+  const lobes = 9 + (seed % 5)
+  for (let i = 0; i < lobes; i++) {
+    const t = (i + 1) / lobes
+    const cx = size * (0.22 + ((seed * 19 + i * 41) % 100) / 180)
+    const cy = size * (0.34 + ((seed * 23 + i * 17) % 100) / 220)
+    const rx = size * (0.16 + t * 0.26)
+    const ry = rx * (0.55 + ((seed + i * 7) % 40) / 100)
+    const g = ctx.createRadialGradient(cx, cy - ry * 0.15, 0, cx, cy, Math.max(rx, ry))
+    g.addColorStop(0, `rgba(255,255,255,${0.62 - t * 0.28})`)
+    g.addColorStop(0.4, `rgba(240,244,250,${0.32 - t * 0.14})`)
+    g.addColorStop(0.75, `rgba(220,228,240,${0.12 - t * 0.06})`)
     g.addColorStop(1, 'rgba(200,210,230,0)')
     ctx.fillStyle = g
     ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.ellipse(cx, cy, rx, ry, ((seed + i) % 12) * 0.2, 0, Math.PI * 2)
     ctx.fill()
   }
+
+  // Soft vignette — keep a flat-ish base, feathered sides (MeteoLab flat condensation base feel).
   ctx.globalCompositeOperation = 'destination-in'
-  const mask = ctx.createRadialGradient(
-    size / 2,
-    size * 0.52,
-    size * 0.05,
-    size / 2,
-    size * 0.48,
-    size * 0.5,
-  )
+  const mask = ctx.createRadialGradient(size / 2, size * 0.58, size * 0.08, size / 2, size * 0.5, size * 0.52)
   mask.addColorStop(0, 'rgba(0,0,0,1)')
-  mask.addColorStop(0.7, 'rgba(0,0,0,0.85)')
+  mask.addColorStop(0.55, 'rgba(0,0,0,0.92)')
+  mask.addColorStop(0.82, 'rgba(0,0,0,0.35)')
   mask.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = mask
   ctx.fillRect(0, 0, size, size)
@@ -93,11 +95,17 @@ function mat4Glsl(m: Matrix4): string {
   return `mat4(${a.map((v) => Number(v).toFixed(8)).join(', ')})`
 }
 
+/**
+ * Ray-marched cloud volume shading inspired by MeteoLab StormLab (MIT, Bandananor):
+ * flat condensation base, cauliflower billows on towers, fibrous ice on anvils,
+ * two-stream sun-through lighting and soft powder edges.
+ */
 function cloudVolumeFragment(
   dims: { width: number; depth: number; height: number },
   inverseModel: Matrix4,
   density: number,
   tint: [number, number, number],
+  iceShare: number,
 ): string {
   const hx = (dims.width * 0.5).toFixed(1)
   const hy = (dims.height * 0.5).toFixed(1)
@@ -105,12 +113,15 @@ function cloudVolumeFragment(
   const inv = mat4Glsl(inverseModel)
   const [tr, tg, tb] = tint.map((c) => (c / 255).toFixed(3))
   const d = density.toFixed(3)
+  const ice = iceShare.toFixed(3)
   return /* glsl */ `
 in vec3 v_positionWC;
 const vec3 u_half = vec3(${hx}, ${hy}, ${hz});
 const float u_density = ${d};
+const float u_ice = ${ice};
 const mat4 u_inverseModel = ${inv};
 const vec3 u_tint = vec3(${tr}, ${tg}, ${tb});
+const float PI = 3.14159265;
 
 float hash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -139,64 +150,127 @@ float fbm(vec3 p) {
   }
   return v;
 }
+// Cauliflower billows (|2n-1| lobes) — MeteoLab-style growing towers.
+float billow(vec3 p) {
+  float v = 0.0;
+  float a = 0.6;
+  for (int i = 0; i < 4; i++) {
+    float n = noise3(p);
+    v += a * abs(n * 2.0 - 1.0);
+    p = p * 2.1 + vec3(3.1, 1.7, 5.9);
+    a *= 0.5;
+  }
+  return v;
+}
+float hg(float c, float g) {
+  float g2 = g * g;
+  return (1.0 - g2) / (4.0 * PI * pow(1.0 + g2 - 2.0 * g * c, 1.5));
+}
+float phase(float c) {
+  return mix(hg(c, -0.15), hg(c, 0.72), 0.32) * 4.0 * PI;
+}
+float sunThrough(float od) {
+  return max(exp(-od), 1.0 / (1.0 + 1.7 * od));
+}
+
 float cloudDensity(vec3 local) {
   vec3 q = local / (u_half * 2.0);
-  float h = q.y;
+  float h = q.y; // -0.5..0.5, bottom to top
   float radial = length(q.xz);
-  float dome = 1.0 - smoothstep(0.15, 0.48, radial);
-  dome *= smoothstep(-0.48, -0.28, h) * (1.0 - smoothstep(0.05, 0.48, h));
-  float tower = 1.0 - smoothstep(0.08, 0.22, length(q.xz));
-  tower *= smoothstep(-0.45, -0.2, h) * (1.0 - smoothstep(0.15, 0.5, h));
-  float body = max(dome, tower * 0.95);
-  body *= mix(0.55, 1.2, fbm(q * 3.2 + vec3(0.1, 0.05, -0.08)));
-  return clamp(body * u_density, 0.0, 1.4);
+
+  // Flat condensation base — no cloud under the base, soft fade in above.
+  float above = h + 0.42;
+  if (above < -0.05) return 0.0;
+  float under = smoothstep(-0.05, 0.12, above);
+  float rise = smoothstep(0.0, 0.35, above);
+
+  // Soft dome / anvil body + convective tower.
+  float dome = 1.0 - smoothstep(0.12, 0.48, radial);
+  dome *= (1.0 - smoothstep(0.05, 0.48, h));
+  float tower = 1.0 - smoothstep(0.06, 0.24, length(q.xz));
+  tower *= smoothstep(-0.42, -0.15, h) * (1.0 - smoothstep(0.12, 0.5, h));
+  float body = max(dome * 0.95, tower);
+
+  // Liquid towers: billows. Ice/cirrus: fibrous horizontal wisps.
+  float liquidN = min(1.0, billow(q * 2.4 + vec3(0.2, 0.05, -0.1)) * 1.35);
+  float iceN = fbm(q * vec3(0.7, 3.1, 0.7) + vec3(0.15, 0.0, -0.2));
+  float n = mix(liquidN, iceN, u_ice);
+  // Soft cumulus falloff elsewhere
+  n = mix(fbm(q * 1.4), n, 0.55 + 0.35 * tower);
+
+  float erode = (1.0 - n) * mix(0.38, 0.22, u_ice) * (1.0 - body * 0.45) * mix(0.25, 1.0, rise);
+  float d = body * 1.25 - erode;
+  d *= (1.0 + 3.2 * tower * (1.0 - u_ice)) * mix(1.0, 0.72, u_ice);
+  return clamp(d * u_density, 0.0, 1.5) * under;
 }
+
 void main() {
   vec4 localH = u_inverseModel * vec4(v_positionWC, 1.0);
   vec3 local = localH.xyz;
   vec3 camLocal = (u_inverseModel * vec4(czm_viewerPositionWC, 1.0)).xyz;
   vec3 rd = normalize(local - camLocal);
   vec3 ro = camLocal;
-  float tMin = 0.0;
-  float tMax = length(u_half) * 2.8;
+
   vec3 invRd = 1.0 / max(abs(rd), vec3(1e-4));
   vec3 t0 = (-u_half - ro) * sign(rd) * invRd;
   vec3 t1 = ( u_half - ro) * sign(rd) * invRd;
   vec3 tsm = min(t0, t1);
   vec3 tlg = max(t0, t1);
-  tMin = max(max(tsm.x, tsm.y), tsm.z);
-  tMax = min(min(tlg.x, tlg.y), tlg.z);
+  float tMin = max(max(tsm.x, tsm.y), tsm.z);
+  float tMax = min(min(tlg.x, tlg.y), tlg.z);
   if (tMax < max(tMin, 0.0)) discard;
   tMin = max(tMin, 0.0);
-  float stepSize = (tMax - tMin) / 28.0;
-  vec4 acc = vec4(0.0);
+
+  // Sun in local ENU-ish box: approximate from Cesium light / viewer.
+  vec3 sunWC = normalize(czm_lightDirectionWC);
+  vec3 sunLocal = normalize((u_inverseModel * vec4(v_positionWC + sunWC * 1000.0, 1.0)).xyz - local);
+  float cosT = dot(-rd, sunLocal);
+  float ph = phase(cosT);
+
+  float stepSize = (tMax - tMin) / 40.0;
+  float T = 1.0;
+  vec3 col = vec3(0.0);
   float t = tMin;
-  for (int i = 0; i < 28; i++) {
+  for (int i = 0; i < 40; i++) {
+    if (T < 0.02 || t > tMax) break;
     vec3 p = ro + rd * t;
     float d = cloudDensity(p);
-    if (d > 0.02) {
-      float light = 0.45 + 0.55 * clamp((p.y / u_half.y) * 0.5 + 0.5, 0.0, 1.0);
-      vec3 col = mix(u_tint * 0.55, vec3(1.0), light);
-      float a = (1.0 - exp(-d * 1.35)) * 0.22;
-      acc.rgb += (1.0 - acc.a) * a * col;
-      acc.a += (1.0 - acc.a) * a;
-      if (acc.a > 0.92) break;
+    if (d > 0.015) {
+      // Cheap optical-depth probe toward the sun (two samples).
+      float od = d * 0.35;
+      od += cloudDensity(p + sunLocal * (u_half.y * 0.08)) * 0.45;
+      od += cloudDensity(p + sunLocal * (u_half.y * 0.2)) * 0.7;
+
+      float powder = 1.0 - exp(-d * 1.6);
+      float h = clamp((p.y / u_half.y) * 0.5 + 0.5, 0.0, 1.0);
+      vec3 ambientTop = u_tint * 1.05;
+      vec3 ambientBot = u_tint * 0.42;
+      vec3 ambient = mix(ambientBot, ambientTop, h);
+      vec3 sunCol = mix(u_tint * 0.75, vec3(1.0, 0.98, 0.94), 0.55);
+      vec3 lit = sunCol * (ph * 0.22 * sunThrough(od) * mix(0.55, 1.0, powder))
+               + ambient * mix(0.25, 0.95, sunThrough(od * 0.6));
+      float sigma = d * 2.4;
+      float a = exp(-sigma * stepSize);
+      float w = T * (1.0 - a);
+      col += lit * w;
+      T *= a;
     }
     t += stepSize;
-    if (t > tMax) break;
   }
-  if (acc.a < 0.02) discard;
-  out_FragColor = vec4(acc.rgb, acc.a);
+  T *= smoothstep(0.02, 0.12, T);
+  float alpha = 1.0 - T;
+  if (alpha < 0.02) discard;
+  out_FragColor = vec4(col / max(alpha, 1e-3), alpha);
 }
 `
 }
 
 /**
- * Imagery-shaped cloud masses: mosaic-textured altitude sheets (exact footprint)
- * plus dense overlapping billboards only where imagery has signal.
+ * Global clouds with MeteoLab-inspired volumetric look: mosaic footprint sheets,
+ * soft irregular fill sprites, and ray-marched cores with billows / ice wisps.
  */
 export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
-  const textures = [0, 1, 2, 3].map((s) => makeCloudTexture(s + 11))
+  const textures = [0, 1, 2, 3, 4].map((s) => makeCloudTexture(s + 11))
   let billboards: BillboardCollection | null = null
   let volumePrimitives: Primitive[] = []
   const sheetEntityIds: string[] = []
@@ -221,13 +295,13 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   }
 
   const addSheets = (tile: ImageryCloudTile, tileIndex: number) => {
-    // Fewer altitude layers when the globe is packed with tiles (perf).
-    const layers = cachedTiles.length > 80 ? (immersive ? 3 : 2) : immersive ? 5 : 4
+    // Soft silhouette haze only — volumes carry the MeteoLab look.
+    const layers = cachedTiles.length > 80 ? 2 : immersive ? 3 : 2
     const span = Math.max(800, tile.topHeightM - tile.baseHeightM)
-    const alpha = Math.min(0.78, 0.28 + tile.meanIntensity * 0.55)
+    const alpha = Math.min(0.42, 0.14 + tile.meanIntensity * 0.32)
     for (let L = 0; L < layers; L++) {
       const t = L / Math.max(1, layers - 1)
-      const h = tile.baseHeightM + t * span
+      const h = tile.baseHeightM + t * span * 0.85
       const id = `cloud-sheet-${tile.z}-${tile.x}-${tile.y}-L${L}-${tileIndex}`
       viewer.entities.add({
         id,
@@ -238,7 +312,7 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
           material: new ImageMaterialProperty({
             image: tile.cloudImage,
             transparent: true,
-            color: Color.fromBytes(255, 255, 255, Math.floor(alpha * 255 * (0.7 + t * 0.3))),
+            color: Color.fromBytes(245, 248, 255, Math.floor(alpha * 255 * (0.75 + t * 0.25))),
           }),
         },
       })
@@ -247,11 +321,11 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   }
 
   const addVolume = (p: CloudFieldPoint) => {
-    const width = Math.max(8_000, (p.horizontalScaleM || 24_000) * 1.1)
-    const depth = width * 0.9
-    const height = Math.max(3_000, p.thicknessM)
+    const width = Math.max(10_000, (p.horizontalScaleM || 24_000) * (p.band === 'high' ? 1.45 : 1.2))
+    const depth = width * (p.band === 'high' ? 1.05 : 0.92)
+    const height = Math.max(3_200, p.thicknessM * (p.band === 'high' ? 0.75 : 1.05))
     const dims = { width, depth, height }
-    const base = Math.max(400, p.heightM - height * 0.45)
+    const base = Math.max(350, p.heightM - height * 0.48)
     const origin = Cartesian3.fromDegrees(p.longitude, p.latitude, base)
     const enu = Transforms.eastNorthUpToFixedFrame(origin)
     const swapYZ = new Matrix4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1)
@@ -265,7 +339,8 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
     })
 
     const tint = BAND_RGB[p.band]
-    const density = 0.55 + (p.volumeStrength || p.cover) * 0.7
+    const density = 0.62 + (p.volumeStrength || p.cover) * 0.75
+    const iceShare = p.band === 'high' ? 0.92 : p.band === 'mid' ? 0.35 : 0.08
     const appearance = new Appearance({
       translucent: true,
       closed: true,
@@ -275,7 +350,7 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
         depthMask: false,
         cull: { enabled: true, face: 1028 },
       },
-      fragmentShaderSource: cloudVolumeFragment(dims, inverse, density, tint),
+      fragmentShaderSource: cloudVolumeFragment(dims, inverse, density, tint, iceShare),
       vertexShaderSource: volumeVertexShader(),
     })
 
@@ -302,10 +377,8 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
     }
 
     const shaped = cachedTiles.length > 0
-    // Mosaic-textured altitude sheets for every tile with signal (Earth-wide).
     if (shaped) {
       const maxTiles = immersive ? 280 : 220
-      // Prefer stronger tiles first but keep nearly the full globe.
       cachedTiles
         .slice()
         .sort((a, b) => b.meanIntensity - a.meanIntensity)
@@ -313,83 +386,82 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
         .forEach((tile, i) => addSheets(tile, i))
     }
 
-    // Dense in-shape fill worldwide; model fallback stays sparser.
-    const maxBillboardCells = shaped
-      ? immersive
-        ? 6500
-        : 5000
-      : immersive
-        ? 900
-        : 700
-    const maxVolumes = shaped ? (immersive ? 48 : 32) : immersive ? 48 : 28
     const sorted = [...cached].sort(
       (a, b) => (b.volumeStrength || b.cover) - (a.volumeStrength || a.cover),
     )
-    const cells = sorted.slice(0, maxBillboardCells)
 
+    // Ray-marched cores carry the MeteoLab look — prefer more volumes, fewer hard sprites.
+    const maxVolumes = shaped ? (immersive ? 96 : 72) : immersive ? 64 : 48
+    sorted.slice(0, maxVolumes).forEach((p) => {
+      if ((p.volumeStrength || p.cover) < (shaped ? 0.28 : 0.22)) return
+      if (shaped && (p.horizontalScaleM || 0) > 0) {
+        addVolume({
+          ...p,
+          horizontalScaleM: Math.min(
+            Math.max(p.horizontalScaleM || 8_000, 8_000) * 1.35,
+            28_000,
+          ),
+        })
+        return
+      }
+      addVolume(p)
+    })
+
+    // Soft distant fill only — irregular blotches, not sphere packs.
+    const maxBillboardCells = shaped
+      ? immersive
+        ? 3200
+        : 2400
+      : immersive
+        ? 700
+        : 520
+    const cells = sorted.slice(0, maxBillboardCells)
     billboards = new BillboardCollection({ scene: viewer.scene })
     viewer.scene.primitives.add(billboards)
 
     cells.forEach((p, i) => {
       const pixelScale = p.horizontalScaleM || 24_000
-      // Imagery fill uses ~pixel footprint; model points keep larger masses.
       const scale = shaped
-        ? Math.max(1_800, pixelScale) * (immersive ? 1.35 : 1.2)
-        : Math.max(10_000, pixelScale) * (immersive ? 1.15 : 1)
-      const baseH = Math.max(600, p.heightM - p.thicknessM * 0.35)
-      const thick = Math.max(2_000, p.thicknessM)
+        ? Math.max(2_400, pixelScale) * (immersive ? 1.45 : 1.25)
+        : Math.max(12_000, pixelScale) * (immersive ? 1.2 : 1.05)
+      const baseH = Math.max(500, p.heightM - p.thicknessM * 0.4)
+      const thick = Math.max(2_200, p.thicknessM)
       const layers = shaped
-        ? cells.length > 2500
-          ? Math.min(2, 1 + Math.floor(p.cover * 1.5))
-          : Math.min(3, 2 + Math.floor(p.cover * 1.5))
-        : Math.min(8, 3 + Math.floor(p.cover * 5))
+        ? cells.length > 2000
+          ? 1
+          : Math.min(2, 1 + Math.floor(p.cover * 1.2))
+        : Math.min(4, 2 + Math.floor(p.cover * 3))
       const [r, g, b] = BAND_RGB[p.band]
-      const alpha = Math.min(0.9, 0.22 + p.cover * 0.55 + (immersive ? 0.08 : 0))
+      const alpha = Math.min(0.72, 0.16 + p.cover * 0.42 + (immersive ? 0.06 : 0))
 
       const metersToDegLat = 1 / 111_320
       const metersToDegLon =
         1 / (111_320 * Math.max(0.2, Math.cos((p.latitude * Math.PI) / 180)))
 
       for (let L = 0; L < layers; L++) {
-        const t = layers === 1 ? 0.5 : L / (layers - 1)
-        const h = baseH + t * thick
-        // Tiny lateral jitter only — keep mass inside the mosaic silhouette.
+        const t = layers === 1 ? 0.45 : L / (layers - 1)
+        const h = baseH + t * thick * 0.85
         const ang = (i * 1.7 + L * 2.3) % (Math.PI * 2)
-        const radM = scale * (shaped ? 0.04 : 0.12) * (0.35 + (L % 3) * 0.25)
-        const east = radM * Math.cos(ang)
-        const north = radM * Math.sin(ang)
-        const lon = p.longitude + east * metersToDegLon
-        const lat = p.latitude + north * metersToDegLat
-
-        const size = shaped
-          ? scale * (0.95 + (1 - Math.abs(t - 0.45)) * 0.25)
-          : scale * (0.55 + (1 - Math.abs(t - 0.45)) * 0.55) * (0.75 + p.cover * 0.4)
+        const radM = scale * (shaped ? 0.03 : 0.1) * (0.4 + (L % 3) * 0.2)
+        const lon = p.longitude + radM * Math.cos(ang) * metersToDegLon
+        const lat = p.latitude + radM * Math.sin(ang) * metersToDegLat
+        // Flattened soft mass — wider than tall, like MeteoLab soft cumulus.
+        const size = scale * (0.85 + (1 - Math.abs(t - 0.4)) * 0.3)
         billboards!.add({
           position: Cartesian3.fromDegrees(lon, lat, h),
           image: textures[(i + L) % textures.length],
-          width: size,
-          height: size * (shaped ? 0.48 + (1 - t) * 0.2 : 0.55 + (1 - t) * 0.25),
+          width: size * (p.band === 'high' ? 1.25 : 1.05),
+          height: size * (p.band === 'high' ? 0.32 : 0.42 + (1 - t) * 0.12),
           sizeInMeters: true,
           verticalOrigin: VerticalOrigin.CENTER,
           horizontalOrigin: HorizontalOrigin.CENTER,
-          color: Color.fromBytes(r, g, b, Math.floor(alpha * 255 * (0.75 + t * 0.25))),
+          color: Color.fromBytes(r, g, b, Math.floor(alpha * 255 * (0.7 + t * 0.3))),
           alignedAxis: Cartesian3.UNIT_Z,
           disableDepthTestDistance: immersive ? 5.0e5 : Number.POSITIVE_INFINITY,
-          scaleByDistance: new NearFarScalar(2.0e4, 1.1, 4.0e6, shaped ? 0.45 : 0.35),
-          translucencyByDistance: new NearFarScalar(8.0e3, 1.0, 6.0e6, 0.25),
+          scaleByDistance: new NearFarScalar(2.0e4, 1.05, 4.0e6, shaped ? 0.5 : 0.4),
+          translucencyByDistance: new NearFarScalar(8.0e3, 1.0, 6.0e6, 0.22),
         })
       }
-    })
-
-    sorted.slice(0, maxVolumes).forEach((p) => {
-      if ((p.volumeStrength || p.cover) < (shaped ? 0.45 : 0.35)) return
-      // Keep volumes tight to the footprint when shaped.
-      if (shaped && (p.horizontalScaleM || 0) > 0) {
-        const tight = { ...p, horizontalScaleM: Math.min(p.horizontalScaleM || 12_000, 18_000) }
-        addVolume(tight)
-        return
-      }
-      addVolume(p)
     })
 
     viewer.scene.requestRender()

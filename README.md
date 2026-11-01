@@ -158,7 +158,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Rain shafts | **Derived** cues at RainViewer-driven cell heads — not measured volumes |
-| Global cloud field | Earth-wide mosaic-shaped altitude sheets + in-footprint fill from RainViewer IR/radar tile alpha (height heuristics — not retrieved CTH/COT); Open-Meteo cover fills gaps / fallback |
+| Global cloud field | Earth-wide mosaic footprint + MeteoLab-inspired ray-marched volumes (soft bases, billows, ice wisps — visual style only; heights are heuristics, not retrieved CTH/COT); Open-Meteo cover fills gaps / fallback |
 | Satellite IR | Processed RainViewer infrared mosaic (preferred cloud-shape source when published) |
 | Cell tracks | Derived heuristic (low confidence) |
 | Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
@@ -195,6 +195,12 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 3. Denser cloud-field LOD / GPU volumetric shells when licensed CTH/COT feeds exist
 
 Do not scrape restricted services. Respect provider terms and licensing.
+
+## Credits
+
+Volumetric cloud shading (billows, flat bases, ice wisps, two-stream sun-through) is visually inspired by
+[MeteoLab / StormLab](https://github.com/Bandananor/MeteoLAB) (MIT). Stormverse does not run their cloud-resolving
+model — live density still comes from RainViewer mosaics / Open-Meteo cover heuristics.
 
 ## Stack
 
