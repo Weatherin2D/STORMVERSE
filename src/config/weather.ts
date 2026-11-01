@@ -41,10 +41,13 @@ export const TRUTH_CELLS_FEED = {
 }
 
 /**
- * Bundled multi-sensor case-study pack (lightning + truth + reference tracks).
- * Example only — not a licensed archive. See public/samples/case-study-nsw.example.json.
+ * Bundled multi-sensor case-study library (lightning + truth + reference tracks).
+ * Example fixtures only — not a licensed archive.
+ * See public/samples/case-studies/catalog.json.
  */
 export const CASE_STUDY_FEED = {
   envKey: 'VITE_CASE_STUDY_URL',
-  samplePath: '/samples/case-study-nsw.example.json',
+  catalogPath: '/samples/case-studies/catalog.json',
+  /** Legacy single-pack path kept for direct links / older docs. */
+  samplePath: '/samples/case-studies/nsw-corridor.example.json',
 }

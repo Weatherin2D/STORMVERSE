@@ -1,39 +1,77 @@
-import type { CaseStudyPack } from '../../weather/caseStudy/types'
-import type { LightningSyncMode } from '../../weather/caseStudy/types'
+import type { CaseStudyCatalog, CaseStudyCatalogEntry, CaseStudyPack } from '../../weather'
+import type { LightningSyncMode } from '../../weather'
 
 interface CaseStudyCardProps {
   caseStudy: CaseStudyPack | null
+  catalog: CaseStudyCatalog | null
+  catalogLoading?: boolean
+  catalogError?: string | null
   loading?: boolean
   error?: string | null
   syncMode: LightningSyncMode
   disabled?: boolean
-  onLoadSample: () => void
+  onLoadById: (id: string) => void
   onClear: () => void
   onSyncModeChange: (mode: LightningSyncMode) => void
 }
 
+function licenseBadge(entry: CaseStudyCatalogEntry): string {
+  return entry.license === 'user-licensed' ? 'licensed' : 'example fixture'
+}
+
 export function CaseStudyCard({
   caseStudy,
+  catalog,
+  catalogLoading,
+  catalogError,
   loading,
   error,
   syncMode,
   disabled,
-  onLoadSample,
+  onLoadById,
   onClear,
   onSyncModeChange,
 }: CaseStudyCardProps) {
+  const entries = catalog?.entries ?? []
+
   return (
     <div className="availability case-study-card">
-      <h3>Multi-sensor case study</h3>
+      <h3>Case study library</h3>
       <p className="provenance">
-        Load a time-aligned lightning + truth + reference-track pack. Example packs are fixtures —
-        not licensed BoM/commercial archives. Live radar continues separately.
+        Time-aligned lightning + truth + reference-track packs. Bundled entries are example fixtures
+        with documented (non-)licences — not BoM/commercial archives. Live radar continues separately.
       </p>
 
+      {catalogLoading && <p className="provenance">Loading catalog…</p>}
+      {catalogError && <p className="provenance verify-error">{catalogError}</p>}
+
+      {entries.length > 0 && (
+        <ul className="case-study-list">
+          {entries.map((entry) => {
+            const active = caseStudy?.id === entry.id
+            return (
+              <li key={entry.id} className={active ? 'active' : undefined}>
+                <button
+                  type="button"
+                  className={active ? 'active' : undefined}
+                  disabled={disabled || loading}
+                  onClick={() => onLoadById(entry.id)}
+                >
+                  <strong>{entry.title}</strong>
+                  <span>
+                    {entry.region} · {entry.sensors.tracks} trk · {entry.sensors.lightning} lght ·{' '}
+                    {entry.sensors.truthCells} truth
+                  </span>
+                  <span className="case-license">{licenseBadge(entry)}</span>
+                </button>
+                <p className="provenance case-entry-note">{entry.licenseNote}</p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
       <div className="verify-actions">
-        <button type="button" className="primary" disabled={disabled || loading} onClick={onLoadSample}>
-          Load NSW example pack
-        </button>
         <button type="button" disabled={disabled || !caseStudy} onClick={onClear}>
           Clear case study
         </button>
@@ -76,10 +114,11 @@ export function CaseStudyCard({
           </p>
         </>
       ) : (
-        !loading && (
+        !loading &&
+        !catalogLoading && (
           <p className="provenance">
-            No case study loaded. The bundled NSW pack aligns lightning, truth, and reference tracks
-            on a shared clock so cross-product sync can be exercised without a licensed archive.
+            No case study loaded. Pick a catalog entry to align lightning, truth, and reference tracks
+            on a shared clock.
           </p>
         )
       )}

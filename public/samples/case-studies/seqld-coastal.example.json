@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "id": "seqld-coastal-example-01",
+  "title": "SE Queensland coastal — example multi-sensor pack",
+  "region": "SE Queensland",
+  "focusObservedAt": "2024-12-03T07:20:00.000Z",
+  "timeRange": {
+    "start": "2024-12-03T07:00:00.000Z",
+    "end": "2024-12-03T07:40:00.000Z"
+  },
+  "focus": { "longitude": 153.05, "latitude": -27.35 },
+  "provenance": {
+    "kind": "synthetic",
+    "summary": "Bundled SE Queensland coastal example pack. Not a licensed BoM or commercial archive.",
+    "sourceId": "case-study-pack",
+    "observedAt": "2024-12-03T07:20:00.000Z",
+    "qualityNote": "Fixture geometry near Brisbane hinterland / coastal corridor for plumbing demos only."
+  },
+  "tracks": [
+    {
+      "id": "case-seq-a",
+      "stormId": "case-seq-a",
+      "observedAt": "2024-12-03T07:20:00.000Z",
+      "confidence": 0.78,
+      "points": [
+        { "time": "2024-12-03T07:00:00.000Z", "longitude": 152.85, "latitude": -27.5, "speedKmh": 38, "bearingDeg": 55 },
+        { "time": "2024-12-03T07:10:00.000Z", "longitude": 152.95, "latitude": -27.42, "speedKmh": 40, "bearingDeg": 58 },
+        { "time": "2024-12-03T07:20:00.000Z", "longitude": 153.05, "latitude": -27.35, "speedKmh": 42, "bearingDeg": 60 },
+        { "time": "2024-12-03T07:30:00.000Z", "longitude": 153.15, "latitude": -27.28, "speedKmh": 41, "bearingDeg": 62 }
+      ],
+      "provenance": {
+        "kind": "synthetic",
+        "summary": "Example SE Qld reference track A — case-study fixture."
+      }
+    },
+    {
+      "id": "case-seq-b",
+      "stormId": "case-seq-b",
+      "observedAt": "2024-12-03T07:20:00.000Z",
+      "confidence": 0.61,
+      "points": [
+        { "time": "2024-12-03T07:05:00.000Z", "longitude": 153.2, "latitude": -27.55, "speedKmh": 30, "bearingDeg": 40 },
+        { "time": "2024-12-03T07:15:00.000Z", "longitude": 153.26, "latitude": -27.5, "speedKmh": 32, "bearingDeg": 42 },
+        { "time": "2024-12-03T07:25:00.000Z", "longitude": 153.32, "latitude": -27.46, "speedKmh": 33, "bearingDeg": 45 }
+      ],
+      "provenance": {
+        "kind": "synthetic",
+        "summary": "Example SE Qld reference track B — case-study fixture."
+      }
+    }
+  ],
+  "truthCells": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.05, -27.35] },
+        "properties": {
+          "id": "case-seq-truth-a",
+          "stormId": "case-seq-a",
+          "observedAt": "2024-12-03T07:20:00.000Z",
+          "source": "case-study-example",
+          "label": "SEQ Truth A",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.32, -27.46] },
+        "properties": {
+          "id": "case-seq-truth-b",
+          "stormId": "case-seq-b",
+          "observedAt": "2024-12-03T07:25:00.000Z",
+          "source": "case-study-example",
+          "label": "SEQ Truth B",
+          "example": true
+        }
+      }
+    ]
+  },
+  "lightning": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.0, -27.38, 4200] },
+        "properties": {
+          "id": "case-seq-lght-1",
+          "observedAt": "2024-12-03T07:18:30.000Z",
+          "classification": "cloud_to_ground",
+          "peakCurrentKa": -44,
+          "qualityScore": 0.93,
+          "network": "case-study-net",
+          "polarity": "negative",
+          "multiplicity": 4,
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.06, -27.34, 5100] },
+        "properties": {
+          "id": "case-seq-lght-2",
+          "observedAt": "2024-12-03T07:19:50.000Z",
+          "classification": "intra_cloud",
+          "qualityScore": 0.88,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.1, -27.31, 3000] },
+        "properties": {
+          "id": "case-seq-lght-3",
+          "observedAt": "2024-12-03T07:20:40.000Z",
+          "classification": "cloud_to_ground",
+          "peakCurrentKa": 18,
+          "qualityScore": 0.8,
+          "network": "case-study-net",
+          "polarity": "positive",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.14, -27.29, 5600] },
+        "properties": {
+          "id": "case-seq-lght-4",
+          "observedAt": "2024-12-03T07:21:15.000Z",
+          "classification": "intra_cloud",
+          "qualityScore": 0.74,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.3, -27.48, 2800] },
+        "properties": {
+          "id": "case-seq-lght-5",
+          "observedAt": "2024-12-03T07:24:10.000Z",
+          "classification": "cloud_to_ground",
+          "peakCurrentKa": -22,
+          "qualityScore": 0.85,
+          "network": "case-study-net",
+          "polarity": "negative",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [152.5, -27.9, 4000] },
+        "properties": {
+          "id": "case-seq-lght-far",
+          "observedAt": "2024-12-03T07:20:00.000Z",
+          "classification": "intra_cloud",
+          "qualityScore": 0.5,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true,
+          "note": "Far strike for spatial-gate demos"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [153.05, -27.35, 4500] },
+        "properties": {
+          "id": "case-seq-lght-old",
+          "observedAt": "2024-12-03T06:10:00.000Z",
+          "classification": "cloud_to_ground",
+          "qualityScore": 0.7,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true,
+          "note": "Outside case clock window"
+        }
+      }
+    ]
+  }
+}

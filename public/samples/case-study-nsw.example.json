@@ -1,14 +1,17 @@
 {
   "version": 1,
   "id": "nsw-corridor-example-01",
-  "title": "NSW inland corridor — example multi-sensor pack",
+  "title": "NSW inland corridor \u2014 example multi-sensor pack",
   "region": "Inland NSW",
   "focusObservedAt": "2024-11-15T06:12:00.000Z",
   "timeRange": {
     "start": "2024-11-15T06:00:00.000Z",
     "end": "2024-11-15T06:30:00.000Z"
   },
-  "focus": { "longitude": 149.12, "latitude": -32.45 },
+  "focus": {
+    "longitude": 149.12,
+    "latitude": -32.45
+  },
   "provenance": {
     "kind": "synthetic",
     "summary": "Bundled example case study for time-aligned lightning, truth cells, and reference tracks. Not a licensed BoM or commercial archive.",
@@ -23,14 +26,38 @@
       "observedAt": "2024-11-15T06:12:00.000Z",
       "confidence": 0.72,
       "points": [
-        { "time": "2024-11-15T06:00:00.000Z", "longitude": 148.95, "latitude": -32.55, "speedKmh": 32, "bearingDeg": 48 },
-        { "time": "2024-11-15T06:06:00.000Z", "longitude": 149.02, "latitude": -32.5, "speedKmh": 34, "bearingDeg": 50 },
-        { "time": "2024-11-15T06:12:00.000Z", "longitude": 149.1, "latitude": -32.45, "speedKmh": 36, "bearingDeg": 52 },
-        { "time": "2024-11-15T06:18:00.000Z", "longitude": 149.18, "latitude": -32.4, "speedKmh": 35, "bearingDeg": 55 }
+        {
+          "time": "2024-11-15T06:00:00.000Z",
+          "longitude": 148.95,
+          "latitude": -32.55,
+          "speedKmh": 32,
+          "bearingDeg": 48
+        },
+        {
+          "time": "2024-11-15T06:06:00.000Z",
+          "longitude": 149.02,
+          "latitude": -32.5,
+          "speedKmh": 34,
+          "bearingDeg": 50
+        },
+        {
+          "time": "2024-11-15T06:12:00.000Z",
+          "longitude": 149.1,
+          "latitude": -32.45,
+          "speedKmh": 36,
+          "bearingDeg": 52
+        },
+        {
+          "time": "2024-11-15T06:18:00.000Z",
+          "longitude": 149.18,
+          "latitude": -32.4,
+          "speedKmh": 35,
+          "bearingDeg": 55
+        }
       ],
       "provenance": {
         "kind": "synthetic",
-        "summary": "Example reference track A — case-study fixture, not RainViewer-derived."
+        "summary": "Example reference track A \u2014 case-study fixture, not RainViewer-derived."
       }
     },
     {
@@ -39,13 +66,31 @@
       "observedAt": "2024-11-15T06:12:00.000Z",
       "confidence": 0.58,
       "points": [
-        { "time": "2024-11-15T06:02:00.000Z", "longitude": 149.25, "latitude": -32.62, "speedKmh": 28, "bearingDeg": 40 },
-        { "time": "2024-11-15T06:08:00.000Z", "longitude": 149.3, "latitude": -32.58, "speedKmh": 30, "bearingDeg": 42 },
-        { "time": "2024-11-15T06:14:00.000Z", "longitude": 149.36, "latitude": -32.54, "speedKmh": 31, "bearingDeg": 44 }
+        {
+          "time": "2024-11-15T06:02:00.000Z",
+          "longitude": 149.25,
+          "latitude": -32.62,
+          "speedKmh": 28,
+          "bearingDeg": 40
+        },
+        {
+          "time": "2024-11-15T06:08:00.000Z",
+          "longitude": 149.3,
+          "latitude": -32.58,
+          "speedKmh": 30,
+          "bearingDeg": 42
+        },
+        {
+          "time": "2024-11-15T06:14:00.000Z",
+          "longitude": 149.36,
+          "latitude": -32.54,
+          "speedKmh": 31,
+          "bearingDeg": 44
+        }
       ],
       "provenance": {
         "kind": "synthetic",
-        "summary": "Example reference track B — case-study fixture, not RainViewer-derived."
+        "summary": "Example reference track B \u2014 case-study fixture, not RainViewer-derived."
       }
     }
   ],
@@ -54,7 +99,13 @@
     "features": [
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.1, -32.45] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.1,
+            -32.45
+          ]
+        },
         "properties": {
           "id": "case-truth-a",
           "stormId": "case-nsw-a",
@@ -67,7 +118,13 @@
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.36, -32.54] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.36,
+            -32.54
+          ]
+        },
         "properties": {
           "id": "case-truth-b",
           "stormId": "case-nsw-b",
@@ -84,7 +141,14 @@
     "features": [
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.08, -32.46, 4800] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.08,
+            -32.46,
+            4800
+          ]
+        },
         "properties": {
           "id": "case-lght-1",
           "observedAt": "2024-11-15T06:11:20.000Z",
@@ -97,7 +161,14 @@
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.12, -32.44, 3200] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.12,
+            -32.44,
+            3200
+          ]
+        },
         "properties": {
           "id": "case-lght-2",
           "observedAt": "2024-11-15T06:12:05.000Z",
@@ -114,7 +185,14 @@
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.16, -32.42, 5100] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.16,
+            -32.42,
+            5100
+          ]
+        },
         "properties": {
           "id": "case-lght-3",
           "observedAt": "2024-11-15T06:12:40.000Z",
@@ -127,7 +205,14 @@
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.34, -32.55, 2900] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.34,
+            -32.55,
+            2900
+          ]
+        },
         "properties": {
           "id": "case-lght-4",
           "observedAt": "2024-11-15T06:13:50.000Z",
@@ -142,7 +227,14 @@
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [148.7, -32.9, 4000] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            148.7,
+            -32.9,
+            4000
+          ]
+        },
         "properties": {
           "id": "case-lght-far",
           "observedAt": "2024-11-15T06:12:10.000Z",
@@ -151,12 +243,19 @@
           "network": "case-study-net",
           "source": "case-study-example",
           "example": true,
-          "note": "Far from tracks — exercises spatial gate"
+          "note": "Far from tracks \u2014 exercises spatial gate"
         }
       },
       {
         "type": "Feature",
-        "geometry": { "type": "Point", "coordinates": [149.1, -32.45, 3500] },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            149.1,
+            -32.45,
+            3500
+          ]
+        },
         "properties": {
           "id": "case-lght-old",
           "observedAt": "2024-11-15T05:20:00.000Z",
@@ -165,7 +264,7 @@
           "network": "case-study-net",
           "source": "case-study-example",
           "example": true,
-          "note": "Outside ±15 min case clock — exercises time sync"
+          "note": "Outside \u00b115 min case clock \u2014 exercises time sync"
         }
       }
     ]

@@ -992,6 +992,9 @@ export default function App() {
             caseStudy={live.caseStudy}
             caseStudyLoading={live.caseStudyLoading}
             caseStudyError={live.caseStudyError}
+            caseStudyCatalog={live.caseStudyCatalog}
+            caseStudyCatalogLoading={live.caseStudyCatalogLoading}
+            caseStudyCatalogError={live.caseStudyCatalogError}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             loading={live.loading}
@@ -1035,16 +1038,15 @@ export default function App() {
                       : 'Globe lightning synced to case-study clock',
               }))
             }}
-            onLoadCaseStudySample={() => {
-              live.loadCaseStudySample()
+            onLoadCaseStudyById={(id) => {
+              live.loadCaseStudyById(id)
               setSelectedTrackId(null)
               setCompareTrackIds([])
               setState((s) => ({
                 ...s,
                 panelOpen: true,
                 layers: { ...s.layers, tracks: true, lightningObs: true },
-                statusMessage:
-                  'Loading NSW multi-sensor case study (example pack — not a licensed archive)',
+                statusMessage: `Loading case study ${id} (check catalog licence note)`,
               }))
             }}
             onClearCaseStudy={() => {

@@ -28,7 +28,7 @@ VITE_TRUTH_CELLS_GEOJSON_URL=    # optional licensed truth-cell FeatureCollectio
 
 Lightning example schema (with quality metadata): [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).  
 Truth-cell example schema: [`public/samples/truth-cells.example.geojson`](public/samples/truth-cells.example.geojson).  
-Multi-sensor case study pack: [`public/samples/case-study-nsw.example.json`](public/samples/case-study-nsw.example.json).
+Case study library catalog: [`public/samples/case-studies/catalog.json`](public/samples/case-studies/catalog.json).
 
 ### Scene snapshots & bookmarks
 
@@ -100,11 +100,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Lightning time sync modes: off / radar clock / case-study clock
 - Case-study sensors are fixtures — not licensed BoM/commercial archives
 
-### 15 — Schematic RHI (current)
+### 15 — Schematic RHI
 - Range–height sketch along the selected derived or case-study track
 - Tops/intensity from CAPE, precip hint, and cell confidence (not dBZ)
 - Optional lightning marks projected into a track corridor
 - Explicitly **not** a measured radar volume or BoM RHI product
+
+### 16 — Multi-case study library (current)
+- Catalog of example packs (NSW, SE Qld, SW WA) with licence notes per entry
+- In-app picker loads packs by id; clear returns to live derived tracks
+- `example-fixture` vs `user-licensed` labels — bundled packs are fixtures only
+- Ready to point catalog paths at licensed archives when available
 
 ## Scientific integrity
 
@@ -112,7 +118,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Cell tracks | Derived heuristic (low confidence) |
-| Case-study tracks / lightning / truth | Example/archive fixtures — not live licensed products |
+| Case-study tracks / lightning / truth | Example/archive fixtures unless marked user-licensed |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
 | Track–truth association | Optional gated match to user catalogue — not BoM skill |
 | Cross-product coherence | Exploratory readiness / co-location hint — not multi-sensor skill |
@@ -138,9 +144,9 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 
 ## Next ideas
 
-1. Wire lightning + truth + case-study loaders to licensed commercial/BoM products when available
+1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
 2. Licensed radar volume / true RHI products under proper licensing
-3. Multi-case study library with documented archive licences
+3. User-supplied case-study import with licence attestation
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

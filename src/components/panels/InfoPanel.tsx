@@ -2,6 +2,7 @@ import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
+  CaseStudyCatalog,
   CaseStudyPack,
   CrossProductReport,
   LightningObservation,
@@ -61,6 +62,9 @@ interface InfoPanelProps {
   caseStudy: CaseStudyPack | null
   caseStudyLoading: boolean
   caseStudyError: string | null
+  caseStudyCatalog: CaseStudyCatalog | null
+  caseStudyCatalogLoading: boolean
+  caseStudyCatalogError: string | null
   loading: boolean
   error: string | null
   onClose: () => void
@@ -79,7 +83,7 @@ interface InfoPanelProps {
   onLoadLightningSample: () => void
   onClearLightningFeed: () => void
   onLightningSyncModeChange: (mode: LightningSyncMode) => void
-  onLoadCaseStudySample: () => void
+  onLoadCaseStudyById: (id: string) => void
   onClearCaseStudy: () => void
   canUseTracksAsTruth: boolean
   onLoadTruthSample: () => void
@@ -127,6 +131,9 @@ export function InfoPanel({
   caseStudy,
   caseStudyLoading,
   caseStudyError,
+  caseStudyCatalog,
+  caseStudyCatalogLoading,
+  caseStudyCatalogError,
   loading,
   error,
   volumePinned,
@@ -145,7 +152,7 @@ export function InfoPanel({
   onLoadLightningSample,
   onClearLightningFeed,
   onLightningSyncModeChange,
-  onLoadCaseStudySample,
+  onLoadCaseStudyById,
   onClearCaseStudy,
   canUseTracksAsTruth,
   onLoadTruthSample,
@@ -207,11 +214,14 @@ export function InfoPanel({
 
           <CaseStudyCard
             caseStudy={caseStudy}
+            catalog={caseStudyCatalog}
+            catalogLoading={caseStudyCatalogLoading}
+            catalogError={caseStudyCatalogError}
             loading={caseStudyLoading}
             error={caseStudyError}
             syncMode={lightningSyncMode}
             disabled={loading}
-            onLoadSample={onLoadCaseStudySample}
+            onLoadById={onLoadCaseStudyById}
             onClear={onClearCaseStudy}
             onSyncModeChange={onLightningSyncModeChange}
           />

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "title": "STORMVERSE example case-study library",
+  "provenance": {
+    "kind": "synthetic",
+    "summary": "Catalog of bundled example multi-sensor packs for plumbing demos. Not a licensed BoM or commercial archive library.",
+    "sourceId": "case-study-catalog"
+  },
+  "entries": [
+    {
+      "id": "nsw-corridor-example-01",
+      "title": "NSW inland corridor",
+      "region": "Inland NSW",
+      "focusObservedAt": "2024-11-15T06:12:00.000Z",
+      "path": "/samples/case-studies/nsw-corridor.example.json",
+      "license": "example-fixture",
+      "licenseNote": "Synthetic fixture — no archive licence. Replace with a licensed pack when available.",
+      "summary": "Two reference cells with time-aligned lightning and truth near the prototype NSW corridor.",
+      "sensors": { "tracks": 2, "lightning": 6, "truthCells": 2 }
+    },
+    {
+      "id": "seqld-coastal-example-01",
+      "title": "SE Queensland coastal",
+      "region": "SE Queensland",
+      "focusObservedAt": "2024-12-03T07:20:00.000Z",
+      "path": "/samples/case-studies/seqld-coastal.example.json",
+      "license": "example-fixture",
+      "licenseNote": "Synthetic fixture — no archive licence. Replace with a licensed pack when available.",
+      "summary": "Coastal cell pair with denser CG lightning for corridor / RHI demos.",
+      "sensors": { "tracks": 2, "lightning": 7, "truthCells": 2 }
+    },
+    {
+      "id": "swwa-wheatbelt-example-01",
+      "title": "SW WA wheatbelt",
+      "region": "Southwest WA",
+      "focusObservedAt": "2025-01-18T08:05:00.000Z",
+      "path": "/samples/case-studies/swwa-wheatbelt.example.json",
+      "license": "example-fixture",
+      "licenseNote": "Synthetic fixture — no archive licence. Replace with a licensed pack when available.",
+      "summary": "Single mature cell with sparse lightning — useful for sparse-coherence / unmatched gates.",
+      "sensors": { "tracks": 1, "lightning": 4, "truthCells": 1 }
+    }
+  ]
+}

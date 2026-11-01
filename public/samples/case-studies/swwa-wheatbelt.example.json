@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "id": "swwa-wheatbelt-example-01",
+  "title": "SW WA wheatbelt — example multi-sensor pack",
+  "region": "Southwest WA",
+  "focusObservedAt": "2025-01-18T08:05:00.000Z",
+  "timeRange": {
+    "start": "2025-01-18T07:50:00.000Z",
+    "end": "2025-01-18T08:25:00.000Z"
+  },
+  "focus": { "longitude": 117.15, "latitude": -32.1 },
+  "provenance": {
+    "kind": "synthetic",
+    "summary": "Bundled Southwest WA wheatbelt example pack. Not a licensed BoM or commercial archive.",
+    "sourceId": "case-study-pack",
+    "observedAt": "2025-01-18T08:05:00.000Z",
+    "qualityNote": "Sparse lightning fixture for unmatched / sparse-coherence demos."
+  },
+  "tracks": [
+    {
+      "id": "case-wa-a",
+      "stormId": "case-wa-a",
+      "observedAt": "2025-01-18T08:05:00.000Z",
+      "confidence": 0.66,
+      "points": [
+        { "time": "2025-01-18T07:50:00.000Z", "longitude": 116.95, "latitude": -32.2, "speedKmh": 26, "bearingDeg": 70 },
+        { "time": "2025-01-18T08:00:00.000Z", "longitude": 117.08, "latitude": -32.14, "speedKmh": 28, "bearingDeg": 72 },
+        { "time": "2025-01-18T08:10:00.000Z", "longitude": 117.2, "latitude": -32.08, "speedKmh": 29, "bearingDeg": 74 },
+        { "time": "2025-01-18T08:20:00.000Z", "longitude": 117.32, "latitude": -32.02, "speedKmh": 27, "bearingDeg": 76 }
+      ],
+      "provenance": {
+        "kind": "synthetic",
+        "summary": "Example SW WA reference track — case-study fixture."
+      }
+    }
+  ],
+  "truthCells": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [117.15, -32.1] },
+        "properties": {
+          "id": "case-wa-truth-a",
+          "stormId": "case-wa-a",
+          "observedAt": "2025-01-18T08:05:00.000Z",
+          "source": "case-study-example",
+          "label": "WA Truth A",
+          "example": true
+        }
+      }
+    ]
+  },
+  "lightning": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [117.12, -32.11, 3800] },
+        "properties": {
+          "id": "case-wa-lght-1",
+          "observedAt": "2025-01-18T08:04:20.000Z",
+          "classification": "intra_cloud",
+          "qualityScore": 0.7,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [117.18, -32.09, 2900] },
+        "properties": {
+          "id": "case-wa-lght-2",
+          "observedAt": "2025-01-18T08:06:00.000Z",
+          "classification": "cloud_to_ground",
+          "peakCurrentKa": -15,
+          "qualityScore": 0.82,
+          "network": "case-study-net",
+          "polarity": "negative",
+          "source": "case-study-example",
+          "example": true
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [116.4, -31.5, 4500] },
+        "properties": {
+          "id": "case-wa-lght-far",
+          "observedAt": "2025-01-18T08:05:00.000Z",
+          "classification": "cloud_to_ground",
+          "qualityScore": 0.4,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true,
+          "note": "Far strike for sparse association demos"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [117.15, -32.1, 5000] },
+        "properties": {
+          "id": "case-wa-lght-old",
+          "observedAt": "2025-01-18T07:00:00.000Z",
+          "classification": "intra_cloud",
+          "qualityScore": 0.6,
+          "network": "case-study-net",
+          "source": "case-study-example",
+          "example": true,
+          "note": "Outside case clock window"
+        }
+      }
+    ]
+  }
+}

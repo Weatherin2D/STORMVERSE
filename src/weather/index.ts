@@ -70,6 +70,15 @@ export {
   type LightningSyncMode,
 } from './caseStudy/types'
 export {
+  catalogPath,
+  fetchCaseStudyCatalog,
+  fetchCaseStudyFromCatalog,
+  findCatalogEntry,
+  type CaseStudyCatalog,
+  type CaseStudyCatalogEntry,
+  type CaseStudyLicenseKind,
+} from './caseStudy/catalog'
+export {
   GeoJsonTruthCellsProvider,
   createTruthCellsProviderFromEnv,
   sampleTruthCellsUrl,

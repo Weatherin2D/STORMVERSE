@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PROTOTYPE_STORM } from '../config/app'
-import { CASE_STUDY_FEED, RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
+import { RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
 import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
@@ -26,7 +26,13 @@ import {
 } from '../weather'
 import type { EnvironmentalProfile } from '../weather/adapters/OpenMeteoAdapter'
 import { deriveTracksFromRadarFrames } from '../weather/reconstruction/deriveTracks'
-import { fetchCaseStudyPack } from '../weather/caseStudy/parseCaseStudy'
+import {
+  fetchCaseStudyCatalog,
+  fetchCaseStudyFromCatalog,
+  findCatalogEntry,
+  type CaseStudyCatalog,
+  type CaseStudyCatalogEntry,
+} from '../weather/caseStudy/catalog'
 import type { CaseStudyPack } from '../weather/caseStudy/types'
 
 export interface LiveWeatherState {
@@ -60,6 +66,12 @@ export interface LiveWeatherState {
   caseStudy: CaseStudyPack | null
   caseStudyLoading: boolean
   caseStudyError: string | null
+  caseStudyCatalog: CaseStudyCatalog | null
+  caseStudyCatalogLoading: boolean
+  caseStudyCatalogError: string | null
+  loadCaseStudyCatalog: () => void
+  loadCaseStudyById: (id: string) => void
+  /** @deprecated Prefer loadCaseStudyById — loads the first catalog entry / NSW pack. */
   loadCaseStudySample: () => void
   clearCaseStudy: () => void
   refresh: () => void
@@ -91,6 +103,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [caseStudy, setCaseStudy] = useState<CaseStudyPack | null>(null)
   const [caseStudyLoading, setCaseStudyLoading] = useState(false)
   const [caseStudyError, setCaseStudyError] = useState<string | null>(null)
+  const [caseStudyCatalog, setCaseStudyCatalog] = useState<CaseStudyCatalog | null>(null)
+  const [caseStudyCatalogLoading, setCaseStudyCatalogLoading] = useState(false)
+  const [caseStudyCatalogError, setCaseStudyCatalogError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const [lightningTick, setLightningTick] = useState(0)
   const [truthTick, setTruthTick] = useState(0)
@@ -285,32 +300,96 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     setTruthTick((n) => n + 1)
   }, [])
 
-  const loadCaseStudySample = useCallback(() => {
-    const controller = new AbortController()
-    setCaseStudyLoading(true)
+  const applyCaseStudyPack = useCallback((pack: CaseStudyPack) => {
+    setCaseStudy(pack)
+    setLightningEvents(pack.lightning)
+    setLightningError(null)
+    setLightningSourceLabel(`case study · ${pack.id}`)
+    setLightningLoading(false)
+    setTruthCells(pack.truthCells)
+    setTruthError(null)
+    setTruthSourceLabel(`case study · ${pack.id}`)
+    setTruthLoading(false)
+    setCaseStudyLoading(false)
     setCaseStudyError(null)
-    // Detach URL feeds so case-study sensors are not overwritten.
-    lightningProvider.setUrl(null)
-    truthProvider.setUrl(null)
-    fetchCaseStudyPack(CASE_STUDY_FEED.samplePath, controller.signal)
-      .then((pack) => {
-        setCaseStudy(pack)
-        setLightningEvents(pack.lightning)
-        setLightningError(null)
-        setLightningSourceLabel(`case study · ${pack.id}`)
-        setLightningLoading(false)
-        setTruthCells(pack.truthCells)
-        setTruthError(null)
-        setTruthSourceLabel(`case study · ${pack.id}`)
-        setTruthLoading(false)
-        setCaseStudyLoading(false)
+  }, [])
+
+  const loadCaseStudyCatalog = useCallback(() => {
+    const controller = new AbortController()
+    setCaseStudyCatalogLoading(true)
+    setCaseStudyCatalogError(null)
+    fetchCaseStudyCatalog(controller.signal)
+      .then((catalog) => {
+        setCaseStudyCatalog(catalog)
+        setCaseStudyCatalogLoading(false)
       })
       .catch((err) => {
-        setCaseStudy(null)
-        setCaseStudyError(err instanceof Error ? err.message : 'Case study failed')
-        setCaseStudyLoading(false)
+        setCaseStudyCatalog(null)
+        setCaseStudyCatalogError(err instanceof Error ? err.message : 'Catalog failed')
+        setCaseStudyCatalogLoading(false)
       })
-  }, [lightningProvider, truthProvider])
+  }, [])
+
+  useEffect(() => {
+    loadCaseStudyCatalog()
+  }, [loadCaseStudyCatalog])
+
+  const loadCaseStudyEntry = useCallback(
+    (entry: CaseStudyCatalogEntry) => {
+      setCaseStudyLoading(true)
+      setCaseStudyError(null)
+      // Detach URL feeds so case-study sensors are not overwritten.
+      lightningProvider.setUrl(null)
+      truthProvider.setUrl(null)
+      fetchCaseStudyFromCatalog(entry)
+        .then(applyCaseStudyPack)
+        .catch((err) => {
+          setCaseStudy(null)
+          setCaseStudyError(err instanceof Error ? err.message : 'Case study failed')
+          setCaseStudyLoading(false)
+        })
+    },
+    [lightningProvider, truthProvider, applyCaseStudyPack],
+  )
+
+  const loadCaseStudyById = useCallback(
+    (id: string) => {
+      const run = async () => {
+        let catalog = caseStudyCatalog
+        if (!catalog) {
+          setCaseStudyCatalogLoading(true)
+          try {
+            catalog = await fetchCaseStudyCatalog()
+            setCaseStudyCatalog(catalog)
+            setCaseStudyCatalogError(null)
+          } catch (err) {
+            setCaseStudyCatalogError(err instanceof Error ? err.message : 'Catalog failed')
+            setCaseStudyError('Case study catalog unavailable')
+            setCaseStudyCatalogLoading(false)
+            return
+          } finally {
+            setCaseStudyCatalogLoading(false)
+          }
+        }
+        const entry = findCatalogEntry(catalog, id)
+        if (!entry) {
+          setCaseStudyError(`Unknown case study id: ${id}`)
+          return
+        }
+        loadCaseStudyEntry(entry)
+      }
+      void run()
+    },
+    [caseStudyCatalog, loadCaseStudyEntry],
+  )
+
+  const loadCaseStudySample = useCallback(() => {
+    if (caseStudyCatalog?.entries[0]) {
+      loadCaseStudyEntry(caseStudyCatalog.entries[0])
+      return
+    }
+    loadCaseStudyById('nsw-corridor-example-01')
+  }, [caseStudyCatalog, loadCaseStudyEntry, loadCaseStudyById])
 
   const loadLightningSample = useCallback(() => {
     setCaseStudy(null)
@@ -420,6 +499,11 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     caseStudy,
     caseStudyLoading,
     caseStudyError,
+    caseStudyCatalog,
+    caseStudyCatalogLoading,
+    caseStudyCatalogError,
+    loadCaseStudyCatalog,
+    loadCaseStudyById,
     loadCaseStudySample,
     clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
