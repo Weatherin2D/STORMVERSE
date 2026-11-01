@@ -198,9 +198,11 @@ float cloudDensity(vec3 local) {
   // Soft cumulus falloff elsewhere
   n = mix(fbm(q * 1.4), n, 0.55 + 0.35 * tower);
 
-  float erode = (1.0 - n) * mix(0.38, 0.22, u_ice) * (1.0 - body * 0.45) * mix(0.25, 1.0, rise);
-  float d = body * 1.25 - erode;
-  d *= (1.0 + 3.2 * tower * (1.0 - u_ice)) * mix(1.0, 0.72, u_ice);
+  // Carve edges with noise but keep a solid core so masses stay visible.
+  float erode = (1.0 - n) * mix(0.28, 0.16, u_ice) * (1.0 - body * 0.55) * mix(0.2, 1.0, rise);
+  float d = max(0.0, body * 1.35 - erode);
+  d = max(d, body * 0.35);
+  d *= (1.0 + 2.4 * tower * (1.0 - u_ice)) * mix(1.0, 0.8, u_ice);
   return clamp(d * u_density, 0.0, 1.5) * under;
 }
 
@@ -211,56 +213,47 @@ void main() {
   vec3 rd = normalize(local - camLocal);
   vec3 ro = camLocal;
 
-  vec3 invRd = 1.0 / max(abs(rd), vec3(1e-4));
-  vec3 t0 = (-u_half - ro) * sign(rd) * invRd;
-  vec3 t1 = ( u_half - ro) * sign(rd) * invRd;
-  vec3 tsm = min(t0, t1);
-  vec3 tlg = max(t0, t1);
-  float tMin = max(max(tsm.x, tsm.y), tsm.z);
-  float tMax = min(min(tlg.x, tlg.y), tlg.z);
+  // Stable AABB ray hit (sign trick can NaN on axis-aligned rays).
+  vec3 invRd = 1.0 / mix(rd, vec3(1e-5), lessThan(abs(rd), vec3(1e-5)));
+  vec3 tmin = (-u_half - ro) * invRd;
+  vec3 tmax = ( u_half - ro) * invRd;
+  vec3 t1v = min(tmin, tmax);
+  vec3 t2v = max(tmin, tmax);
+  float tMin = max(max(t1v.x, t1v.y), t1v.z);
+  float tMax = min(min(t2v.x, t2v.y), t2v.z);
   if (tMax < max(tMin, 0.0)) discard;
   tMin = max(tMin, 0.0);
 
-  // Sun in local ENU-ish box: approximate from Cesium light / viewer.
-  vec3 sunWC = normalize(czm_lightDirectionWC);
-  vec3 sunLocal = normalize((u_inverseModel * vec4(v_positionWC + sunWC * 1000.0, 1.0)).xyz - local);
+  // Fixed local sun (Appearance shaders have no czm_lightDirectionWC).
+  vec3 sunLocal = normalize(vec3(0.35, 0.82, 0.28));
   float cosT = dot(-rd, sunLocal);
   float ph = phase(cosT);
 
-  float stepSize = (tMax - tMin) / 40.0;
-  float T = 1.0;
-  vec3 col = vec3(0.0);
-  float t = tMin;
-  for (int i = 0; i < 40; i++) {
-    if (T < 0.02 || t > tMax) break;
+  float stepSize = (tMax - tMin) / 36.0;
+  vec4 acc = vec4(0.0);
+  float t = tMin + stepSize * 0.5;
+  for (int i = 0; i < 36; i++) {
+    if (acc.a > 0.94 || t > tMax) break;
     vec3 p = ro + rd * t;
     float d = cloudDensity(p);
-    if (d > 0.015) {
-      // Cheap optical-depth probe toward the sun (two samples).
-      float od = d * 0.35;
-      od += cloudDensity(p + sunLocal * (u_half.y * 0.08)) * 0.45;
-      od += cloudDensity(p + sunLocal * (u_half.y * 0.2)) * 0.7;
-
-      float powder = 1.0 - exp(-d * 1.6);
+    if (d > 0.02) {
+      float od = d * 0.4;
+      od += cloudDensity(p + sunLocal * (u_half.y * 0.1)) * 0.55;
+      od += cloudDensity(p + sunLocal * (u_half.y * 0.22)) * 0.75;
+      float powder = 1.0 - exp(-d * 1.4);
       float h = clamp((p.y / u_half.y) * 0.5 + 0.5, 0.0, 1.0);
-      vec3 ambientTop = u_tint * 1.05;
-      vec3 ambientBot = u_tint * 0.42;
-      vec3 ambient = mix(ambientBot, ambientTop, h);
-      vec3 sunCol = mix(u_tint * 0.75, vec3(1.0, 0.98, 0.94), 0.55);
-      vec3 lit = sunCol * (ph * 0.22 * sunThrough(od) * mix(0.55, 1.0, powder))
-               + ambient * mix(0.25, 0.95, sunThrough(od * 0.6));
-      float sigma = d * 2.4;
-      float a = exp(-sigma * stepSize);
-      float w = T * (1.0 - a);
-      col += lit * w;
-      T *= a;
+      vec3 ambient = mix(u_tint * 0.48, u_tint * 1.08, h);
+      vec3 sunCol = mix(u_tint * 0.8, vec3(1.0, 0.98, 0.95), 0.5);
+      vec3 lit = sunCol * (0.35 + 0.55 * ph * 0.18) * sunThrough(od) * mix(0.6, 1.0, powder)
+               + ambient * mix(0.35, 1.0, sunThrough(od * 0.55));
+      float a = (1.0 - exp(-d * 1.55)) * 0.28;
+      acc.rgb += (1.0 - acc.a) * a * lit;
+      acc.a += (1.0 - acc.a) * a;
     }
     t += stepSize;
   }
-  T *= smoothstep(0.02, 0.12, T);
-  float alpha = 1.0 - T;
-  if (alpha < 0.02) discard;
-  out_FragColor = vec4(col / max(alpha, 1e-3), alpha);
+  if (acc.a < 0.02) discard;
+  out_FragColor = vec4(acc.rgb, clamp(acc.a, 0.0, 0.92));
 }
 `
 }
@@ -295,13 +288,13 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
   }
 
   const addSheets = (tile: ImageryCloudTile, tileIndex: number) => {
-    // Soft silhouette haze only — volumes carry the MeteoLab look.
-    const layers = cachedTiles.length > 80 ? 2 : immersive ? 3 : 2
+    // Visible mosaic silhouette + soft altitude stack (volumes add MeteoLab depth).
+    const layers = cachedTiles.length > 80 ? (immersive ? 3 : 2) : immersive ? 4 : 3
     const span = Math.max(800, tile.topHeightM - tile.baseHeightM)
-    const alpha = Math.min(0.42, 0.14 + tile.meanIntensity * 0.32)
+    const alpha = Math.min(0.72, 0.28 + tile.meanIntensity * 0.5)
     for (let L = 0; L < layers; L++) {
       const t = L / Math.max(1, layers - 1)
-      const h = tile.baseHeightM + t * span * 0.85
+      const h = tile.baseHeightM + t * span
       const id = `cloud-sheet-${tile.z}-${tile.x}-${tile.y}-L${L}-${tileIndex}`
       viewer.entities.add({
         id,
@@ -312,7 +305,7 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
           material: new ImageMaterialProperty({
             image: tile.cloudImage,
             transparent: true,
-            color: Color.fromBytes(245, 248, 255, Math.floor(alpha * 255 * (0.75 + t * 0.25))),
+            color: Color.fromBytes(245, 248, 255, Math.floor(alpha * 255 * (0.7 + t * 0.3))),
           }),
         },
       })
@@ -432,7 +425,7 @@ export function createGlobalCloudField(viewer: Viewer): GlobalCloudFieldHandle {
           : Math.min(2, 1 + Math.floor(p.cover * 1.2))
         : Math.min(4, 2 + Math.floor(p.cover * 3))
       const [r, g, b] = BAND_RGB[p.band]
-      const alpha = Math.min(0.72, 0.16 + p.cover * 0.42 + (immersive ? 0.06 : 0))
+      const alpha = Math.min(0.88, 0.28 + p.cover * 0.5 + (immersive ? 0.08 : 0))
 
       const metersToDegLat = 1 / 111_320
       const metersToDegLon =
