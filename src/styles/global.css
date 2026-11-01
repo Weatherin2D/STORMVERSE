@@ -742,18 +742,38 @@ button {
   font-size: 11px;
 }
 
-.case-study-card .case-import {
+.case-study-card .case-shelf {
   margin: 12px 0 10px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
+.case-study-card .case-shelf h4,
 .case-study-card .case-import h4 {
   margin: 0 0 6px;
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+.case-study-card .case-shelf-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.case-study-card .case-shelf-delete {
+  align-self: start;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.case-study-card .case-import {
+  margin: 12px 0 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .case-study-card .case-import-note {

@@ -1,18 +1,26 @@
 import { useRef, useState } from 'react'
-import type { CaseStudyCatalog, CaseStudyCatalogEntry, CaseStudyPack } from '../../weather'
-import type { LightningSyncMode } from '../../weather'
-import { downloadCaseStudyTemplate } from '../../weather'
+import type {
+  CaseStudyCatalog,
+  CaseStudyCatalogEntry,
+  CaseStudyPack,
+  CaseStudyShelfListItem,
+  LightningSyncMode,
+} from '../../weather'
+import { downloadCaseStudyTemplate, MAX_CASE_STUDY_SHELF } from '../../weather'
 
 interface CaseStudyCardProps {
   caseStudy: CaseStudyPack | null
   catalog: CaseStudyCatalog | null
   catalogLoading?: boolean
   catalogError?: string | null
+  shelf: CaseStudyShelfListItem[]
   loading?: boolean
   error?: string | null
   syncMode: LightningSyncMode
   disabled?: boolean
   onLoadById: (id: string) => void
+  onLoadShelfId: (shelfId: string) => { ok: boolean; message: string }
+  onDeleteShelfId: (shelfId: string) => { ok: boolean; message: string }
   onImportText: (
     text: string,
     opts: { licenceNote: string; sourceFilename?: string },
@@ -30,11 +38,14 @@ export function CaseStudyCard({
   catalog,
   catalogLoading,
   catalogError,
+  shelf,
   loading,
   error,
   syncMode,
   disabled,
   onLoadById,
+  onLoadShelfId,
+  onDeleteShelfId,
   onImportText,
   onClear,
   onSyncModeChange,
@@ -61,7 +72,7 @@ export function CaseStudyCard({
       {entries.length > 0 && (
         <ul className="case-study-list">
           {entries.map((entry) => {
-            const active = caseStudy?.id === entry.id
+            const active = caseStudy?.id === entry.id && !caseStudy.importAttestation
             return (
               <li key={entry.id} className={active ? 'active' : undefined}>
                 <button
@@ -84,11 +95,68 @@ export function CaseStudyCard({
         </ul>
       )}
 
+      <div className="case-shelf">
+        <h4>Local import shelf</h4>
+        <p className="provenance">
+          Attested imports are kept in this browser’s localStorage (
+          <span className="mono">stormverse.caseStudyShelf.v1</span>, max {MAX_CASE_STUDY_SHELF}
+          ). Device-local only — clearing site data removes them.
+        </p>
+        {shelf.length === 0 ? (
+          <p className="provenance">No shelved imports yet. Attested uploads appear here automatically.</p>
+        ) : (
+          <ul className="case-study-list case-shelf-list">
+            {shelf.map((entry) => {
+              const active =
+                caseStudy?.id === entry.packId && Boolean(caseStudy.importAttestation)
+              return (
+                <li key={entry.shelfId} className={active ? 'active' : undefined}>
+                  <div className="case-shelf-row">
+                    <button
+                      type="button"
+                      className={active ? 'active' : undefined}
+                      disabled={disabled || loading}
+                      onClick={() => {
+                        const result = onLoadShelfId(entry.shelfId)
+                        setImportMessage(result.message)
+                      }}
+                    >
+                      <strong>{entry.title}</strong>
+                      <span>
+                        {entry.region} · {entry.sensors.tracks} trk · {entry.sensors.lightning} lght ·{' '}
+                        {entry.sensors.truthCells} truth
+                      </span>
+                      <span className="case-license">imported · attested</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="case-shelf-delete"
+                      disabled={disabled}
+                      aria-label={`Remove ${entry.title} from shelf`}
+                      onClick={() => {
+                        const result = onDeleteShelfId(entry.shelfId)
+                        setImportMessage(result.message)
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <p className="provenance case-entry-note">
+                    {entry.licenceNote}
+                    {entry.sourceFilename ? ` · ${entry.sourceFilename}` : ''}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
       <div className="case-import">
         <h4>Import your pack</h4>
         <p className="provenance">
           Upload a STORMVERSE case-study JSON. Import requires an explicit rights attestation — we
-          do not scrape or invent archive data for you.
+          do not scrape or invent archive data for you. Successful imports are shelved locally.
         </p>
         <label className="case-import-note">
           <span>Licence / rights note</span>
@@ -214,7 +282,8 @@ export function CaseStudyCard({
         !loading &&
         !catalogLoading && (
           <p className="provenance">
-            No case study loaded. Pick a catalog entry or import a licensed pack with attestation.
+            No case study loaded. Pick a catalog or shelf entry, or import a licensed pack with
+            attestation.
           </p>
         )
       )}

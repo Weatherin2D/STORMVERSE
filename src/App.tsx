@@ -995,6 +995,7 @@ export default function App() {
             caseStudyCatalog={live.caseStudyCatalog}
             caseStudyCatalogLoading={live.caseStudyCatalogLoading}
             caseStudyCatalogError={live.caseStudyCatalogError}
+            caseStudyShelf={live.caseStudyShelf}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             loading={live.loading}
@@ -1048,6 +1049,27 @@ export default function App() {
                 layers: { ...s.layers, tracks: true, lightningObs: true },
                 statusMessage: `Loading case study ${id} (check catalog licence note)`,
               }))
+            }}
+            onLoadCaseStudyShelfId={(shelfId) => {
+              const result = live.loadCaseStudyFromShelfId(shelfId)
+              if (result.ok) {
+                setSelectedTrackId(null)
+                setCompareTrackIds([])
+                setState((s) => ({
+                  ...s,
+                  panelOpen: true,
+                  layers: { ...s.layers, tracks: true, lightningObs: true },
+                  statusMessage: result.message,
+                }))
+              } else {
+                setState((s) => ({ ...s, statusMessage: result.message }))
+              }
+              return result
+            }}
+            onDeleteCaseStudyShelfId={(shelfId) => {
+              const result = live.deleteCaseStudyShelfEntry(shelfId)
+              setState((s) => ({ ...s, statusMessage: result.message }))
+              return result
             }}
             onImportCaseStudyText={(text, opts) => {
               const result = live.importCaseStudyText(text, opts)

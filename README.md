@@ -38,6 +38,10 @@ Use **Export scene** / **Copy share link** / **Import scene** / **Save bookmark*
 - Share links encode the same payload in the URL hash (`#scene=…`)
 - Named bookmarks live in this browser’s `localStorage` (`stormverse.sceneBookmarks.v1`, max 24)
 - Manage them in the info panel **Saved scenes** gallery (save / restore / rename / delete)
+
+### Case-study import shelf
+
+Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShelf.v1`, max 12) and listed under **Local import shelf** in the case study library. Load or remove them without re-uploading. Device-local only.
 - Restore rematches cells by `stormId` against the live derived-track catalogue (radar is always re-fetched)
 
 ## Milestone status
@@ -112,11 +116,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - `example-fixture` vs `user-licensed` labels — bundled packs are fixtures only
 - Ready to point catalog paths at licensed archives when available
 
-### 17 — User case-study import (current)
+### 17 — User case-study import
 - Import a local STORMVERSE case-study JSON with required rights attestation
 - Licence / rights note stored on the loaded pack provenance
 - Download an empty template pack; no scraping or fabricated archives
 - Import refused without attestation checkbox + non-empty licence note
+
+### 18 — Local attested-import shelf (current)
+- Successful attested imports auto-save to a device-local shelf (`localStorage`)
+- Reload shelved packs from the case-study library without re-uploading
+- Remove shelf entries; max 12 packs; clearing site data wipes the shelf
+- Still requires prior user attestation — no scraping or fabricated archives
 
 ## Scientific integrity
 
@@ -147,13 +157,14 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Case-study clock and live radar times are independent by design
 - Schematic RHI colour bands are not calibrated dBZ
 - User import attestation is self-declared — STORMVERSE cannot verify third-party licences
+- Import shelf is device-local (not synced); clearing site data removes shelved packs
 - Tracks empty when Australia mosaics lack precip (unless a case study is loaded)
 
 ## Next ideas
 
 1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
 2. Licensed radar volume / true RHI products under proper licensing
-3. Persist attested imports in a local library shelf (still device-local)
+3. Optional export of a shelved pack back to JSON with attestation metadata intact
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

@@ -4,6 +4,7 @@ import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
   CaseStudyCatalog,
   CaseStudyPack,
+  CaseStudyShelfListItem,
   CrossProductReport,
   LightningObservation,
   LightningQualityFilter,
@@ -65,6 +66,7 @@ interface InfoPanelProps {
   caseStudyCatalog: CaseStudyCatalog | null
   caseStudyCatalogLoading: boolean
   caseStudyCatalogError: string | null
+  caseStudyShelf: CaseStudyShelfListItem[]
   loading: boolean
   error: string | null
   onClose: () => void
@@ -84,6 +86,8 @@ interface InfoPanelProps {
   onClearLightningFeed: () => void
   onLightningSyncModeChange: (mode: LightningSyncMode) => void
   onLoadCaseStudyById: (id: string) => void
+  onLoadCaseStudyShelfId: (shelfId: string) => { ok: boolean; message: string }
+  onDeleteCaseStudyShelfId: (shelfId: string) => { ok: boolean; message: string }
   onImportCaseStudyText: (
     text: string,
     opts: { licenceNote: string; sourceFilename?: string },
@@ -138,6 +142,7 @@ export function InfoPanel({
   caseStudyCatalog,
   caseStudyCatalogLoading,
   caseStudyCatalogError,
+  caseStudyShelf,
   loading,
   error,
   volumePinned,
@@ -157,6 +162,8 @@ export function InfoPanel({
   onClearLightningFeed,
   onLightningSyncModeChange,
   onLoadCaseStudyById,
+  onLoadCaseStudyShelfId,
+  onDeleteCaseStudyShelfId,
   onImportCaseStudyText,
   onClearCaseStudy,
   canUseTracksAsTruth,
@@ -222,11 +229,14 @@ export function InfoPanel({
             catalog={caseStudyCatalog}
             catalogLoading={caseStudyCatalogLoading}
             catalogError={caseStudyCatalogError}
+            shelf={caseStudyShelf}
             loading={caseStudyLoading}
             error={caseStudyError}
             syncMode={lightningSyncMode}
             disabled={loading}
             onLoadById={onLoadCaseStudyById}
+            onLoadShelfId={onLoadCaseStudyShelfId}
+            onDeleteShelfId={onDeleteCaseStudyShelfId}
             onImportText={onImportCaseStudyText}
             onClear={onClearCaseStudy}
             onSyncModeChange={onLightningSyncModeChange}

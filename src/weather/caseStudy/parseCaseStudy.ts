@@ -118,6 +118,24 @@ export function parseCaseStudyPack(raw: unknown, sourcePath?: string): CaseStudy
     },
   }))
 
+  const attestationRaw = asRecord(o.importAttestation)
+  const importAttestation: CaseStudyImportAttestation | undefined =
+    attestationRaw &&
+    attestationRaw.attestedByUser === true &&
+    typeof attestationRaw.licenceNote === 'string' &&
+    attestationRaw.licenceNote.trim() &&
+    typeof attestationRaw.attestedAt === 'string'
+      ? {
+          attestedAt: attestationRaw.attestedAt,
+          licenceNote: attestationRaw.licenceNote.trim().slice(0, 500),
+          sourceFilename:
+            typeof attestationRaw.sourceFilename === 'string'
+              ? attestationRaw.sourceFilename
+              : undefined,
+          attestedByUser: true,
+        }
+      : undefined
+
   return {
     version: CASE_STUDY_VERSION,
     id: o.id,
@@ -131,6 +149,7 @@ export function parseCaseStudyPack(raw: unknown, sourcePath?: string): CaseStudy
     lightning: stampedLightning,
     truthCells,
     tracks,
+    importAttestation,
   }
 }
 

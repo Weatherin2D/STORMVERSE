@@ -75,6 +75,18 @@ export {
   type LightningSyncMode,
 } from './caseStudy/types'
 export {
+  CASE_STUDY_SHELF_KEY,
+  MAX_CASE_STUDY_SHELF,
+  listCaseStudyShelf,
+  loadCaseStudyFromShelf,
+  saveCaseStudyToShelf,
+  deleteCaseStudyFromShelf,
+  clearCaseStudyShelf,
+  packToCaseStudyDocument,
+  type CaseStudyShelfEntry,
+  type CaseStudyShelfListItem,
+} from './caseStudy/importShelf'
+export {
   catalogPath,
   fetchCaseStudyCatalog,
   fetchCaseStudyFromCatalog,

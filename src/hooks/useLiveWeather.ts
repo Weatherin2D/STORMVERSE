@@ -37,6 +37,13 @@ import {
   attachCaseStudyAttestation,
   parseCaseStudyPackFromText,
 } from '../weather/caseStudy/parseCaseStudy'
+import {
+  deleteCaseStudyFromShelf,
+  listCaseStudyShelf,
+  loadCaseStudyFromShelf,
+  saveCaseStudyToShelf,
+  type CaseStudyShelfListItem,
+} from '../weather/caseStudy/importShelf'
 import type { CaseStudyPack } from '../weather/caseStudy/types'
 
 export interface LiveWeatherState {
@@ -81,6 +88,10 @@ export interface LiveWeatherState {
     text: string,
     opts: { licenceNote: string; sourceFilename?: string },
   ) => { ok: boolean; message: string }
+  caseStudyShelf: CaseStudyShelfListItem[]
+  refreshCaseStudyShelf: () => void
+  loadCaseStudyFromShelfId: (shelfId: string) => { ok: boolean; message: string }
+  deleteCaseStudyShelfEntry: (shelfId: string) => { ok: boolean; message: string }
   clearCaseStudy: () => void
   refresh: () => void
 }
@@ -114,6 +125,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [caseStudyCatalog, setCaseStudyCatalog] = useState<CaseStudyCatalog | null>(null)
   const [caseStudyCatalogLoading, setCaseStudyCatalogLoading] = useState(false)
   const [caseStudyCatalogError, setCaseStudyCatalogError] = useState<string | null>(null)
+  const [caseStudyShelf, setCaseStudyShelf] = useState<CaseStudyShelfListItem[]>(() =>
+    listCaseStudyShelf(),
+  )
   const [tick, setTick] = useState(0)
   const [lightningTick, setLightningTick] = useState(0)
   const [truthTick, setTruthTick] = useState(0)
@@ -399,6 +413,10 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     loadCaseStudyById('nsw-corridor-example-01')
   }, [caseStudyCatalog, loadCaseStudyEntry, loadCaseStudyById])
 
+  const refreshCaseStudyShelf = useCallback(() => {
+    setCaseStudyShelf(listCaseStudyShelf())
+  }, [])
+
   const importCaseStudyText = useCallback(
     (text: string, opts: { licenceNote: string; sourceFilename?: string }) => {
       try {
@@ -407,9 +425,13 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
         lightningProvider.setUrl(null)
         truthProvider.setUrl(null)
         applyCaseStudyPack(attested)
+        const shelved = saveCaseStudyToShelf(attested)
+        refreshCaseStudyShelf()
         return {
           ok: true,
-          message: `Imported “${attested.title}” with licence attestation`,
+          message: shelved.ok
+            ? `Imported “${attested.title}” · ${shelved.message}`
+            : `Imported “${attested.title}” with attestation (${shelved.message})`,
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Case study import failed'
@@ -417,7 +439,43 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
         return { ok: false, message }
       }
     },
-    [lightningProvider, truthProvider, applyCaseStudyPack],
+    [lightningProvider, truthProvider, applyCaseStudyPack, refreshCaseStudyShelf],
+  )
+
+  const loadCaseStudyFromShelfId = useCallback(
+    (shelfId: string) => {
+      const pack = loadCaseStudyFromShelf(shelfId)
+      if (!pack) {
+        const message = 'Shelved case study not found or invalid'
+        setCaseStudyError(message)
+        refreshCaseStudyShelf()
+        return { ok: false, message }
+      }
+      lightningProvider.setUrl(null)
+      truthProvider.setUrl(null)
+      applyCaseStudyPack(pack)
+      return { ok: true, message: `Loaded shelved “${pack.title}”` }
+    },
+    [lightningProvider, truthProvider, applyCaseStudyPack, refreshCaseStudyShelf],
+  )
+
+  const deleteCaseStudyShelfEntry = useCallback(
+    (shelfId: string) => {
+      const entry = caseStudyShelf.find((e) => e.shelfId === shelfId)
+      const removed = deleteCaseStudyFromShelf(shelfId)
+      refreshCaseStudyShelf()
+      if (!removed) return { ok: false, message: 'Shelf entry not found' }
+      if (
+        caseStudy &&
+        entry &&
+        caseStudy.id === entry.packId &&
+        caseStudy.importAttestation
+      ) {
+        clearCaseStudy()
+      }
+      return { ok: true, message: 'Removed from local shelf' }
+    },
+    [caseStudyShelf, refreshCaseStudyShelf, caseStudy, clearCaseStudy],
   )
 
   const loadLightningSample = useCallback(() => {
@@ -535,6 +593,10 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     loadCaseStudyById,
     loadCaseStudySample,
     importCaseStudyText,
+    caseStudyShelf,
+    refreshCaseStudyShelf,
+    loadCaseStudyFromShelfId,
+    deleteCaseStudyShelfEntry,
     clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
   }
