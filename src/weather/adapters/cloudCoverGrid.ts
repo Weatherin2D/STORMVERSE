@@ -25,6 +25,10 @@ export interface CloudFieldPoint {
   heightM: number
   /** Vertical thickness heuristic (metres). */
   thicknessM: number
+  /** Horizontal extent of the cloud mass (metres). */
+  horizontalScaleM: number
+  /** 0–1 how “solid” the volumetric core should read. */
+  volumeStrength: number
   typeProxy: CloudTypeProxy
   provenance: Provenance
 }
@@ -157,6 +161,8 @@ export function samplesToCloudFieldPoints(samples: CloudCoverSample[]): CloudFie
         cover,
         heightM: meta.heightM,
         thicknessM: meta.thicknessM * (0.55 + cover * 0.7),
+        horizontalScaleM: (band === 'high' ? 36_000 : band === 'mid' ? 28_000 : 42_000) * (0.6 + cover),
+        volumeStrength: cover,
         typeProxy: meta.typeProxy,
         provenance: {
           ...provenanceBase,

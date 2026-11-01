@@ -9,6 +9,8 @@ import {
   fetchOpenMeteoEnvironment,
   matchTracksToTruth,
   sampleLightningUrl,
+  sampleRadarCloudProxies,
+  sampleSatelliteIrCloudField,
   sampleTruthCellsUrl,
   samplesToCloudFieldPoints,
   scoreTracks,
@@ -190,23 +192,75 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     let cancelled = false
     setCloudFieldLoading(true)
     setCloudFieldError(null)
-    fetchCloudCoverGrid(controller.signal)
-      .then((samples) => {
+
+    ;(async () => {
+      try {
+        // Prefer RainViewer IR; if catalog has no IR, sample radar mosaics; enrich with Open-Meteo.
+        const sat =
+          satelliteFrames.find((f) => f.available && f.tileUrlTemplate) ??
+          (await australianWeatherProvider.getSatellite({})).find(
+            (f) => f.available && f.tileUrlTemplate,
+          ) ??
+          null
+        let points = await sampleSatelliteIrCloudField(sat, {
+          signal: controller.signal,
+          maxPoints: 850,
+          zoom: 4,
+        })
+        if (points.length < 40) {
+          const radar =
+            radarFrames.find((f) => f.available && f.tileUrlTemplate) ??
+            (await australianWeatherProvider.getRadar({})).find(
+              (f) => f.available && f.tileUrlTemplate,
+            ) ??
+            null
+          const radarPts = await sampleRadarCloudProxies(radar, {
+            signal: controller.signal,
+            maxPoints: 650,
+            zoom: 5,
+          })
+          points = [...points, ...radarPts]
+        }
+        if (points.length < 80) {
+          const samples = await fetchCloudCoverGrid(controller.signal)
+          const modelPts = samplesToCloudFieldPoints(samples)
+          points = [...points, ...modelPts]
+        }
+        // De-dupe near-identical lon/lat
+        const seen = new Set<string>()
+        const deduped = points.filter((p) => {
+          const k = `${p.longitude.toFixed(2)},${p.latitude.toFixed(2)},${p.band}`
+          if (seen.has(k)) return false
+          seen.add(k)
+          return true
+        })
         if (cancelled) return
-        setCloudField(samplesToCloudFieldPoints(samples))
+        setCloudField(deduped.slice(0, 1000))
         setCloudFieldLoading(false)
-      })
-      .catch((err) => {
+        setCloudFieldError(
+          deduped.length === 0
+            ? 'Cloud field empty — waiting for RainViewer / Open-Meteo'
+            : null,
+        )
+      } catch (err) {
         if (cancelled) return
         setCloudField([])
-        setCloudFieldError(err instanceof Error ? err.message : 'Cloud cover grid failed')
+        setCloudFieldError(err instanceof Error ? err.message : 'Cloud field failed')
         setCloudFieldLoading(false)
-      })
+      }
+    })()
+
     return () => {
       cancelled = true
       controller.abort()
     }
-  }, [tick])
+  }, [
+    tick,
+    satelliteFrames.length,
+    radarFrames.length,
+    radarFrames[radarFrames.length - 1]?.observedAt,
+    satelliteFrames[satelliteFrames.length - 1]?.observedAt,
+  ])
 
   useEffect(() => {
     if (!enableTracks) {

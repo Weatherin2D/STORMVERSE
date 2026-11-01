@@ -142,8 +142,11 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 
 ### 21 — Global Cesium immersive atmosphere (current)
 - Immersive mode stays on the Cesium globe (prototype Three.js storm removed)
-- Global cloud field from Open-Meteo `cloud_cover_low/mid/high` (type **proxies** only)
-- RainViewer IR mosaic + derived rain shafts at cell heads; radar mosaic unchanged
+- **Volumetric** cloud masses: soft meter-scale billboard puffs + ray-marched cores
+- Primary drive: RainViewer **infrared** tile sampling (brightness→height/thickness heuristics)
+- If IR catalog empty: RainViewer **radar** mosaic sampling as cloud proxies (labelled)
+- Enrichment: Open-Meteo `cloud_cover_low/mid/high` type **proxies**
+- Derived rain shafts at cell heads; radar mosaic unchanged
 - Lightning only from GeoJSON / samples / attested case packs — never invented strokes
 - Astronomical sun from observation UTC (`Follow sun`); day/sunrise/sunset/night are labelled previews
 
@@ -153,8 +156,8 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Rain shafts | **Derived** cues at RainViewer-driven cell heads — not measured volumes |
-| Global cloud field | Open-Meteo model cloud-cover bands → height shells / type **proxies** (not WMO types or CTH) |
-| Satellite IR | Processed RainViewer infrared mosaic |
+| Global cloud field | RainViewer IR samples → thick volumetric puffs/cores (not retrieved CTH/COT); Open-Meteo bands as fallback proxies |
+| Satellite IR | Processed RainViewer infrared mosaic (also sampled for cloud masses) |
 | Cell tracks | Derived heuristic (low confidence) |
 | Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |

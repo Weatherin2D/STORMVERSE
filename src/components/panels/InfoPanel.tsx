@@ -221,7 +221,7 @@ export function InfoPanel({
               ? 'Loading Open-Meteo cloud-cover grid…'
               : cloudFieldError
                 ? cloudFieldError
-                : `${cloudFieldCount} band samples (low/mid/high type proxies — not WMO types)`}
+                : `${cloudFieldCount} IR/model volumetric masses (brightness→height heuristics — not retrieved CTH)`}
           </p>
           {error && <p className="provenance">{error}</p>}
 

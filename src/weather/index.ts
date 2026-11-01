@@ -15,6 +15,8 @@ export {
   type CloudFieldPoint,
   type CloudTypeProxy,
 } from './adapters/cloudCoverGrid'
+export { sampleSatelliteIrCloudField } from './adapters/satelliteIrClouds'
+export { sampleRadarCloudProxies } from './adapters/radarCloudProxy'
 export { deriveTracksFromRadarFrames } from './reconstruction/deriveTracks'
 export {
   mapEnvironmentToReconstruction,
