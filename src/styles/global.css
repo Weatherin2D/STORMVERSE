@@ -683,6 +683,24 @@ button {
   font-size: 12px;
 }
 
+.case-study-card .case-sync-label {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 4px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.case-study-card .case-sync-label select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--text);
+}
+
 .scene-share {
   position: relative;
 }

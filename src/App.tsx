@@ -34,6 +34,7 @@ import {
   summarizeLightningQuality,
   type LightningObservation,
   type LightningQualityFilter,
+  type LightningSyncMode,
   type ReconstructionTarget,
 } from './weather'
 import { TIMELINE } from './config/app'
@@ -87,7 +88,7 @@ export default function App() {
   const [lightningFilter, setLightningFilter] = useState<LightningQualityFilter>(
     () => ({ ...DEFAULT_LIGHTNING_FILTER }),
   )
-  const [syncLightningToRadarTime, setSyncLightningToRadarTime] = useState(false)
+  const [lightningSyncMode, setLightningSyncMode] = useState<LightningSyncMode>('off')
 
   const qualityFilteredLightning = useMemo(
     () => filterLightningEvents(live.lightningEvents, lightningFilter),
@@ -103,14 +104,21 @@ export default function App() {
     return live.radarFrames[idx]?.observedAt ?? null
   }, [live.radarFrames, state.timeline.cursor])
 
+  const syncObservedAt =
+    lightningSyncMode === 'case'
+      ? live.caseStudy?.focusObservedAt ?? null
+      : lightningSyncMode === 'radar'
+        ? radarObservedAt
+        : null
+
   const filteredLightningEvents = useMemo(() => {
-    if (!syncLightningToRadarTime) return qualityFilteredLightning
+    if (!syncObservedAt) return qualityFilteredLightning
     return lightningInObservationWindow(
       qualityFilteredLightning,
-      radarObservedAt,
+      syncObservedAt,
       DEFAULT_CROSS_PRODUCT_TIME_WINDOW_SEC,
     )
-  }, [syncLightningToRadarTime, qualityFilteredLightning, radarObservedAt])
+  }, [syncObservedAt, qualityFilteredLightning])
 
   const lightningQualitySummary = useMemo(
     () => summarizeLightningQuality(live.lightningEvents, qualityFilteredLightning),
@@ -120,7 +128,7 @@ export default function App() {
   const crossProductReport = useMemo(
     () =>
       buildCrossProductReport({
-        radarObservedAt,
+        radarObservedAt: syncObservedAt ?? radarObservedAt,
         radarFrameCount: live.radarFrames.length,
         tracks: live.tracks,
         trackSkillSummary: live.trackSkillSummary,
@@ -132,6 +140,7 @@ export default function App() {
         selectedTrackId,
       }),
     [
+      syncObservedAt,
       radarObservedAt,
       live.radarFrames.length,
       live.tracks,
@@ -144,6 +153,26 @@ export default function App() {
       selectedTrackId,
     ],
   )
+
+  useEffect(() => {
+    if (live.caseStudy) {
+      setLightningSyncMode((mode) => (mode === 'off' ? 'case' : mode))
+      return
+    }
+    setLightningSyncMode((mode) => (mode === 'case' ? 'off' : mode))
+  }, [live.caseStudy])
+
+  useEffect(() => {
+    if (!live.caseStudy) return
+    setSelectedTrackId(live.caseStudy.tracks[0]?.id ?? null)
+    setFlyTarget({
+      lon: live.caseStudy.focus.longitude,
+      lat: live.caseStudy.focus.latitude,
+      height: 220_000,
+      token: Date.now(),
+      oblique: true,
+    })
+  }, [live.caseStudy?.id])
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -959,7 +988,10 @@ export default function App() {
             lightningFilter={lightningFilter}
             lightningSummary={lightningQualitySummary}
             crossProductReport={crossProductReport}
-            syncLightningToRadarTime={syncLightningToRadarTime}
+            lightningSyncMode={lightningSyncMode}
+            caseStudy={live.caseStudy}
+            caseStudyLoading={live.caseStudyLoading}
+            caseStudyError={live.caseStudyError}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             loading={live.loading}
@@ -991,13 +1023,37 @@ export default function App() {
                 statusMessage: 'Lightning feed cleared',
               }))
             }}
-            onSyncLightningToRadarTime={(enabled) => {
-              setSyncLightningToRadarTime(enabled)
+            onLightningSyncModeChange={(mode) => {
+              setLightningSyncMode(mode)
               setState((s) => ({
                 ...s,
-                statusMessage: enabled
-                  ? 'Globe lightning synced to radar observation time window'
-                  : 'Globe lightning time sync off',
+                statusMessage:
+                  mode === 'off'
+                    ? 'Globe lightning time sync off'
+                    : mode === 'radar'
+                      ? 'Globe lightning synced to radar observation time'
+                      : 'Globe lightning synced to case-study clock',
+              }))
+            }}
+            onLoadCaseStudySample={() => {
+              live.loadCaseStudySample()
+              setSelectedTrackId(null)
+              setCompareTrackIds([])
+              setState((s) => ({
+                ...s,
+                panelOpen: true,
+                layers: { ...s.layers, tracks: true, lightningObs: true },
+                statusMessage:
+                  'Loading NSW multi-sensor case study (example pack — not a licensed archive)',
+              }))
+            }}
+            onClearCaseStudy={() => {
+              live.clearCaseStudy()
+              setSelectedTrackId(null)
+              setCompareTrackIds([])
+              setState((s) => ({
+                ...s,
+                statusMessage: 'Case study cleared — returning to live derived tracks',
               }))
             }}
             canUseTracksAsTruth={live.tracks.length > 0}

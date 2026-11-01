@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PROTOTYPE_STORM } from '../config/app'
-import { RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
+import { CASE_STUDY_FEED, RAINVIEWER, TRUTH_CELLS_FEED } from '../config/weather'
 import {
   australianWeatherProvider,
   createLightningProviderFromEnv,
@@ -26,6 +26,8 @@ import {
 } from '../weather'
 import type { EnvironmentalProfile } from '../weather/adapters/OpenMeteoAdapter'
 import { deriveTracksFromRadarFrames } from '../weather/reconstruction/deriveTracks'
+import { fetchCaseStudyPack } from '../weather/caseStudy/parseCaseStudy'
+import type { CaseStudyPack } from '../weather/caseStudy/types'
 
 export interface LiveWeatherState {
   loading: boolean
@@ -55,6 +57,11 @@ export interface LiveWeatherState {
   loadTruthSample: () => void
   loadTruthFromTracks: () => void
   clearTruthCatalogue: () => void
+  caseStudy: CaseStudyPack | null
+  caseStudyLoading: boolean
+  caseStudyError: string | null
+  loadCaseStudySample: () => void
+  clearCaseStudy: () => void
   refresh: () => void
 }
 
@@ -68,7 +75,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [radarFrames, setRadarFrames] = useState<RadarObservation[]>([])
   const [satelliteFrames, setSatelliteFrames] = useState<SatelliteObservation[]>([])
   const [environment, setEnvironment] = useState<EnvironmentalProfile | null>(null)
-  const [tracks, setTracks] = useState<StormTrack[]>([])
+  const [derivedTracks, setDerivedTracks] = useState<StormTrack[]>([])
   const [lightningEvents, setLightningEvents] = useState<LightningObservation[]>([])
   const [lightningLoading, setLightningLoading] = useState(false)
   const [lightningError, setLightningError] = useState<string | null>(null)
@@ -81,6 +88,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [truthSourceLabel, setTruthSourceLabel] = useState<string | null>(() =>
     truthProvider.getUrl(),
   )
+  const [caseStudy, setCaseStudy] = useState<CaseStudyPack | null>(null)
+  const [caseStudyLoading, setCaseStudyLoading] = useState(false)
+  const [caseStudyError, setCaseStudyError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const [lightningTick, setLightningTick] = useState(0)
   const [truthTick, setTruthTick] = useState(0)
@@ -125,40 +135,8 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   }, [tick, lightningProvider, lightningTick])
 
   useEffect(() => {
-    if (!lightningProvider.configured()) {
-      setLightningEvents([])
-      setLightningError(null)
-      setLightningLoading(false)
-      setLightningSourceLabel(null)
-      return
-    }
-    const controller = new AbortController()
-    let cancelled = false
-    setLightningLoading(true)
-    ;(async () => {
-      try {
-        const events = await lightningProvider.getLightning({}, controller.signal)
-        if (cancelled) return
-        setLightningEvents(events)
-        setLightningError(null)
-        setLightningSourceLabel(lightningProvider.getUrl())
-      } catch (err) {
-        if (cancelled) return
-        setLightningEvents([])
-        setLightningError(err instanceof Error ? err.message : 'Lightning feed failed')
-      } finally {
-        if (!cancelled) setLightningLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [lightningProvider, lightningTick])
-
-  useEffect(() => {
     if (!enableTracks) {
-      setTracks([])
+      setDerivedTracks([])
       setTracksLoading(false)
       return
     }
@@ -174,7 +152,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     })
       .then((derived) => {
         if (cancelled) return
-        setTracks(derived)
+        setDerivedTracks(derived)
         setAvailability((prev) => {
           const without = prev.filter((p) => p.id !== 'aus-storm-track')
           if (derived.length === 0) {
@@ -215,7 +193,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       .catch((err) => {
         if (cancelled) return
         console.warn('Cell track derivation failed', err)
-        setTracks([])
+        setDerivedTracks([])
       })
       .finally(() => {
         if (!cancelled) setTracksLoading(false)
@@ -233,6 +211,41 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   }, [])
 
   useEffect(() => {
+    // Case-study pack owns lightning/truth while active.
+    if (caseStudy) return
+    if (!lightningProvider.configured()) {
+      setLightningEvents([])
+      setLightningError(null)
+      setLightningLoading(false)
+      setLightningSourceLabel(null)
+      return
+    }
+    const controller = new AbortController()
+    let cancelled = false
+    setLightningLoading(true)
+    ;(async () => {
+      try {
+        const events = await lightningProvider.getLightning({}, controller.signal)
+        if (cancelled) return
+        setLightningEvents(events)
+        setLightningError(null)
+        setLightningSourceLabel(lightningProvider.getUrl())
+      } catch (err) {
+        if (cancelled) return
+        setLightningEvents([])
+        setLightningError(err instanceof Error ? err.message : 'Lightning feed failed')
+      } finally {
+        if (!cancelled) setLightningLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [lightningProvider, lightningTick, caseStudy])
+
+  useEffect(() => {
+    if (caseStudy) return
     if (!truthProvider.configured()) {
       setTruthCells([])
       setTruthError(null)
@@ -262,29 +275,73 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       cancelled = true
       controller.abort()
     }
-  }, [truthProvider, truthTick])
+  }, [truthProvider, truthTick, caseStudy])
+
+  const clearCaseStudy = useCallback(() => {
+    setCaseStudy(null)
+    setCaseStudyError(null)
+    setCaseStudyLoading(false)
+    setLightningTick((n) => n + 1)
+    setTruthTick((n) => n + 1)
+  }, [])
+
+  const loadCaseStudySample = useCallback(() => {
+    const controller = new AbortController()
+    setCaseStudyLoading(true)
+    setCaseStudyError(null)
+    // Detach URL feeds so case-study sensors are not overwritten.
+    lightningProvider.setUrl(null)
+    truthProvider.setUrl(null)
+    fetchCaseStudyPack(CASE_STUDY_FEED.samplePath, controller.signal)
+      .then((pack) => {
+        setCaseStudy(pack)
+        setLightningEvents(pack.lightning)
+        setLightningError(null)
+        setLightningSourceLabel(`case study · ${pack.id}`)
+        setLightningLoading(false)
+        setTruthCells(pack.truthCells)
+        setTruthError(null)
+        setTruthSourceLabel(`case study · ${pack.id}`)
+        setTruthLoading(false)
+        setCaseStudyLoading(false)
+      })
+      .catch((err) => {
+        setCaseStudy(null)
+        setCaseStudyError(err instanceof Error ? err.message : 'Case study failed')
+        setCaseStudyLoading(false)
+      })
+  }, [lightningProvider, truthProvider])
 
   const loadLightningSample = useCallback(() => {
+    setCaseStudy(null)
     lightningProvider.setUrl(sampleLightningUrl())
     setLightningTick((n) => n + 1)
   }, [lightningProvider])
 
   const clearLightningFeed = useCallback(() => {
+    if (caseStudy) {
+      clearCaseStudy()
+      return
+    }
     lightningProvider.setUrl(null)
     setLightningEvents([])
     setLightningError(null)
     setLightningSourceLabel(null)
     setLightningTick((n) => n + 1)
-  }, [lightningProvider])
+  }, [lightningProvider, caseStudy, clearCaseStudy])
 
   const loadTruthSample = useCallback(() => {
+    setCaseStudy(null)
     truthProvider.setUrl(sampleTruthCellsUrl())
     setTruthTick((n) => n + 1)
   }, [truthProvider])
 
+  const tracks = caseStudy?.tracks ?? derivedTracks
+
   const loadTruthFromTracks = useCallback(() => {
     // Stand-in catalogue: detach from URL provider so export midpoints stay sticky
     // until cleared (even if radar tracks refresh).
+    setCaseStudy(null)
     truthProvider.setUrl(null)
     const cells = truthCellsFromTracks(tracks)
     setTruthCells(cells)
@@ -294,12 +351,16 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   }, [truthProvider, tracks])
 
   const clearTruthCatalogue = useCallback(() => {
+    if (caseStudy) {
+      clearCaseStudy()
+      return
+    }
     truthProvider.setUrl(null)
     setTruthCells([])
     setTruthError(null)
     setTruthSourceLabel(null)
     setTruthTick((n) => n + 1)
-  }, [truthProvider])
+  }, [truthProvider, caseStudy, clearCaseStudy])
 
   const trackSkills = useMemo(
     () => scoreTracks(tracks, radarFrames),
@@ -323,9 +384,9 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       summarizeTrackTruth(
         trackTruthMatches,
         truthCells.length,
-        truthProvider.configured() || truthCells.length > 0,
+        Boolean(caseStudy) || truthProvider.configured() || truthCells.length > 0,
       ),
-    [trackTruthMatches, truthCells.length, truthProvider],
+    [trackTruthMatches, truthCells.length, truthProvider, caseStudy],
   )
 
   return {
@@ -340,14 +401,14 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     trackSkills,
     trackSkillSummary,
     lightningEvents,
-    lightningConfigured: lightningProvider.configured() || lightningEvents.length > 0,
+    lightningConfigured: Boolean(caseStudy) || lightningProvider.configured() || lightningEvents.length > 0,
     lightningLoading,
     lightningError,
     lightningSourceLabel,
     loadLightningSample,
     clearLightningFeed,
     truthCells,
-    truthConfigured: truthProvider.configured() || truthCells.length > 0,
+    truthConfigured: Boolean(caseStudy) || truthProvider.configured() || truthCells.length > 0,
     truthLoading,
     truthError,
     truthSourceLabel,
@@ -356,6 +417,11 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     loadTruthSample,
     loadTruthFromTracks,
     clearTruthCatalogue,
+    caseStudy,
+    caseStudyLoading,
+    caseStudyError,
+    loadCaseStudySample,
+    clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
   }
 }

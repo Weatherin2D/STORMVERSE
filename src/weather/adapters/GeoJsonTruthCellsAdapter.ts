@@ -25,7 +25,7 @@ interface TruthGeoJson {
   features: TruthGeoJsonFeature[]
 }
 
-function parseFeatureCollection(data: unknown, sourceHint: string): TruthCell[] {
+export function parseTruthFeatureCollection(data: unknown, sourceHint: string): TruthCell[] {
   if (!data || typeof data !== 'object') {
     throw new Error('Truth cells feed must be a GeoJSON FeatureCollection of Points')
   }
@@ -140,7 +140,7 @@ export class GeoJsonTruthCellsProvider {
       headers: { Accept: 'application/geo+json, application/json' },
     })
     if (!res.ok) throw new Error(`Truth cells GeoJSON request failed (${res.status})`)
-    return parseFeatureCollection(await res.json(), this.id)
+    return parseTruthFeatureCollection(await res.json(), this.id)
   }
 }
 

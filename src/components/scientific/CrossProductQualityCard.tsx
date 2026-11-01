@@ -2,21 +2,14 @@ import type { CrossProductReport } from '../../weather'
 
 interface CrossProductQualityCardProps {
   report: CrossProductReport | null
-  syncLightningToRadarTime: boolean
-  disabled?: boolean
-  onSyncChange: (enabled: boolean) => void
+  syncLabel?: string | null
 }
 
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`
 }
 
-export function CrossProductQualityCard({
-  report,
-  syncLightningToRadarTime,
-  disabled,
-  onSyncChange,
-}: CrossProductQualityCardProps) {
+export function CrossProductQualityCard({ report, syncLabel }: CrossProductQualityCardProps) {
   if (!report) {
     return (
       <div className="availability cross-product-card">
@@ -68,15 +61,7 @@ export function CrossProductQualityCard({
         </div>
       </dl>
 
-      <label className="lightning-check cross-sync">
-        <input
-          type="checkbox"
-          disabled={disabled}
-          checked={syncLightningToRadarTime}
-          onChange={(e) => onSyncChange(e.target.checked)}
-        />
-        <span>Sync globe lightning to radar observation time window</span>
-      </label>
+      {syncLabel && <p className="provenance mono">Time sync · {syncLabel}</p>}
 
       <p className="provenance">
         <strong>Provenance:</strong> {report.provenance.summary}

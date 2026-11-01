@@ -59,7 +59,10 @@ function parseClassification(raw: unknown): LightningClassification {
   return 'unknown'
 }
 
-function parseFeatureCollection(data: unknown, sourceHint: string): LightningObservation[] {
+export function parseLightningFeatureCollection(
+  data: unknown,
+  sourceHint: string,
+): LightningObservation[] {
   if (!data || typeof data !== 'object') {
     throw new Error('Lightning feed must be a GeoJSON FeatureCollection of Points')
   }
@@ -201,7 +204,7 @@ export class GeoJsonLightningProvider {
       headers: { Accept: 'application/geo+json, application/json' },
     })
     if (!res.ok) throw new Error(`Lightning GeoJSON request failed (${res.status})`)
-    let events = parseFeatureCollection(await res.json(), this.id)
+    let events = parseLightningFeatureCollection(await res.json(), this.id)
 
     if (query.range) {
       const start = Date.parse(query.range.start)

@@ -2,10 +2,12 @@ import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
+  CaseStudyPack,
   CrossProductReport,
   LightningObservation,
   LightningQualityFilter,
   LightningQualitySummary,
+  LightningSyncMode,
   ReconstructionTarget,
   StormTrack,
   TrackSkillScore,
@@ -21,6 +23,7 @@ import { TrackSkillCard } from '../scientific/TrackSkillCard'
 import { TrackVerificationCard } from '../scientific/TrackVerificationCard'
 import { LightningQualityCard } from '../scientific/LightningQualityCard'
 import { CrossProductQualityCard } from '../scientific/CrossProductQualityCard'
+import { CaseStudyCard } from '../scientific/CaseStudyCard'
 import { SceneBookmarkGallery } from '../controls/SceneBookmarkGallery'
 
 interface InfoPanelProps {
@@ -53,7 +56,10 @@ interface InfoPanelProps {
   lightningFilter: LightningQualityFilter
   lightningSummary: LightningQualitySummary | null
   crossProductReport: CrossProductReport | null
-  syncLightningToRadarTime: boolean
+  lightningSyncMode: LightningSyncMode
+  caseStudy: CaseStudyPack | null
+  caseStudyLoading: boolean
+  caseStudyError: string | null
   loading: boolean
   error: string | null
   onClose: () => void
@@ -71,7 +77,9 @@ interface InfoPanelProps {
   onLightningFilterChange: (next: LightningQualityFilter) => void
   onLoadLightningSample: () => void
   onClearLightningFeed: () => void
-  onSyncLightningToRadarTime: (enabled: boolean) => void
+  onLightningSyncModeChange: (mode: LightningSyncMode) => void
+  onLoadCaseStudySample: () => void
+  onClearCaseStudy: () => void
   canUseTracksAsTruth: boolean
   onLoadTruthSample: () => void
   onUseTracksAsTruth: () => void
@@ -114,7 +122,10 @@ export function InfoPanel({
   lightningFilter,
   lightningSummary,
   crossProductReport,
-  syncLightningToRadarTime,
+  lightningSyncMode,
+  caseStudy,
+  caseStudyLoading,
+  caseStudyError,
   loading,
   error,
   volumePinned,
@@ -132,7 +143,9 @@ export function InfoPanel({
   onLightningFilterChange,
   onLoadLightningSample,
   onClearLightningFeed,
-  onSyncLightningToRadarTime,
+  onLightningSyncModeChange,
+  onLoadCaseStudySample,
+  onClearCaseStudy,
   canUseTracksAsTruth,
   onLoadTruthSample,
   onUseTracksAsTruth,
@@ -191,11 +204,28 @@ export function InfoPanel({
             </ul>
           </div>
 
+          <CaseStudyCard
+            caseStudy={caseStudy}
+            loading={caseStudyLoading}
+            error={caseStudyError}
+            syncMode={lightningSyncMode}
+            disabled={loading}
+            onLoadSample={onLoadCaseStudySample}
+            onClear={onClearCaseStudy}
+            onSyncModeChange={onLightningSyncModeChange}
+          />
+
           <CrossProductQualityCard
             report={crossProductReport}
-            syncLightningToRadarTime={syncLightningToRadarTime}
-            disabled={loading}
-            onSyncChange={onSyncLightningToRadarTime}
+            syncLabel={
+              lightningSyncMode === 'off'
+                ? 'off'
+                : lightningSyncMode === 'radar'
+                  ? 'radar observation time'
+                  : caseStudy
+                    ? `case clock · ${caseStudy.focusObservedAt}`
+                    : 'case clock (inactive)'
+            }
           />
 
           <div className="availability">
@@ -221,7 +251,17 @@ export function InfoPanel({
           </div>
 
           <div className="availability">
-            <h3>Derived cell tracks {tracksLoading ? '(computing…)' : ''}</h3>
+            <h3>
+              {caseStudy
+                ? 'Case-study reference tracks'
+                : `Derived cell tracks ${tracksLoading ? '(computing…)' : ''}`}
+            </h3>
+            {caseStudy && (
+              <p className="provenance">
+                Showing example reference tracks from the loaded case study. Live RainViewer-derived
+                cells resume when you clear the case study.
+              </p>
+            )}
             {tracks.length === 0 ? (
               <p className="provenance">
                 {tracksLoading

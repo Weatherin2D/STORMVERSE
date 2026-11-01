@@ -27,7 +27,8 @@ VITE_TRUTH_CELLS_GEOJSON_URL=    # optional licensed truth-cell FeatureCollectio
 ```
 
 Lightning example schema (with quality metadata): [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).  
-Truth-cell example schema: [`public/samples/truth-cells.example.geojson`](public/samples/truth-cells.example.geojson).
+Truth-cell example schema: [`public/samples/truth-cells.example.geojson`](public/samples/truth-cells.example.geojson).  
+Multi-sensor case study pack: [`public/samples/case-study-nsw.example.json`](public/samples/case-study-nsw.example.json).
 
 ### Scene snapshots & bookmarks
 
@@ -87,11 +88,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Load bundled sample feed; markers tint by classification/quality
 - Filters never invent detections — licensed URL still required for live networks
 
-### 13 — Cross-product quality dashboard (current)
+### 13 — Cross-product quality dashboard
 - Unified radar / tracks / lightning / truth readiness panel
 - Exploratory coherence hint from time + distance gates (not verification skill)
 - Optional sync of globe lightning to the active radar observation window
 - Missing feeds stay gaps — never filled with fabricated observations
+
+### 14 — Time-aligned multi-sensor case study (current)
+- Bundled NSW example pack: reference tracks + lightning + truth on one clock
+- Load / clear from the info panel; live radar stays independent
+- Lightning time sync modes: off / radar clock / case-study clock
+- Case-study sensors are fixtures — not licensed BoM/commercial archives
 
 ## Scientific integrity
 
@@ -99,6 +106,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Cell tracks | Derived heuristic (low confidence) |
+| Case-study tracks / lightning / truth | Example/archive fixtures — not live licensed products |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
 | Track–truth association | Optional gated match to user catalogue — not BoM skill |
 | Cross-product coherence | Exploratory readiness / co-location hint — not multi-sensor skill |
@@ -107,7 +115,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Globe volume / compare set | **Procedural**, georegistered |
 | Scene snapshot / bookmark | UI/state only — does not freeze live weather fields |
 | Immersive 3D storm | **Procedural** local scene |
-| Globe lightning | Direct only from configured/sample GeoJSON — quality fields from feed |
+| Globe lightning | Direct only from configured/sample/case GeoJSON — quality fields from feed |
 | Prototype storm / demo bolts | Synthetic |
 
 ## Known limitations
@@ -116,14 +124,15 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Snapshots and bookmarks cannot guarantee the same cells exist after catalogue refresh
 - Bookmarks are device-local (not synced); clearing site data removes them
 - Track “skill”, truth-association, and cross-product scores are not formal verification products
-- Sample lightning / truth cells are plumbing fixtures — replace with licensed catalogues
-- Tracks empty when Australia mosaics lack precip
+- Sample lightning / truth / case-study packs are plumbing fixtures — replace with licensed catalogues
+- Case-study clock and live radar times are independent by design
+- Tracks empty when Australia mosaics lack precip (unless a case study is loaded)
 
 ## Next ideas
 
-1. Wire lightning + truth hooks to licensed commercial/BoM products when available
+1. Wire lightning + truth + case-study loaders to licensed commercial/BoM products when available
 2. Radar volume / RHI products under proper licensing
-3. Time-aligned multi-sensor case studies with licensed archives
+3. Multi-case study library with documented archive licences
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

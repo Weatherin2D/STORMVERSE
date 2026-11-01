@@ -39,3 +39,12 @@ export const TRUTH_CELLS_FEED = {
   maxDistanceKm: 50,
   maxTimeDeltaSec: 90 * 60,
 }
+
+/**
+ * Bundled multi-sensor case-study pack (lightning + truth + reference tracks).
+ * Example only — not a licensed archive. See public/samples/case-study-nsw.example.json.
+ */
+export const CASE_STUDY_FEED = {
+  envKey: 'VITE_CASE_STUDY_URL',
+  samplePath: '/samples/case-study-nsw.example.json',
+}

@@ -30,6 +30,7 @@ export {
 export {
   GeoJsonLightningProvider,
   createLightningProviderFromEnv,
+  parseLightningFeatureCollection,
   sampleLightningUrl,
 } from './adapters/GeoJsonLightningAdapter'
 export {
@@ -52,6 +53,16 @@ export {
   type CrossProductFeedStatus,
   type CrossProductInputs,
 } from './reconstruction/crossProductQuality'
+export {
+  parseCaseStudyPack,
+  fetchCaseStudyPack,
+} from './caseStudy/parseCaseStudy'
+export {
+  CASE_STUDY_VERSION,
+  type CaseStudyMeta,
+  type CaseStudyPack,
+  type LightningSyncMode,
+} from './caseStudy/types'
 export {
   GeoJsonTruthCellsProvider,
   createTruthCellsProviderFromEnv,
