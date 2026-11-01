@@ -7,6 +7,7 @@ import {
   createTruthCellsProviderFromEnv,
   fetchOpenMeteoEnvironment,
   matchTracksToTruth,
+  sampleLightningUrl,
   sampleTruthCellsUrl,
   scoreTracks,
   summarizeTrackSkills,
@@ -39,6 +40,11 @@ export interface LiveWeatherState {
   trackSkillSummary: TrackSkillSummary
   lightningEvents: LightningObservation[]
   lightningConfigured: boolean
+  lightningLoading: boolean
+  lightningError: string | null
+  lightningSourceLabel: string | null
+  loadLightningSample: () => void
+  clearLightningFeed: () => void
   truthCells: TruthCell[]
   truthConfigured: boolean
   truthLoading: boolean
@@ -64,6 +70,11 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
   const [environment, setEnvironment] = useState<EnvironmentalProfile | null>(null)
   const [tracks, setTracks] = useState<StormTrack[]>([])
   const [lightningEvents, setLightningEvents] = useState<LightningObservation[]>([])
+  const [lightningLoading, setLightningLoading] = useState(false)
+  const [lightningError, setLightningError] = useState<string | null>(null)
+  const [lightningSourceLabel, setLightningSourceLabel] = useState<string | null>(() =>
+    lightningProvider.getUrl(),
+  )
   const [truthCells, setTruthCells] = useState<TruthCell[]>([])
   const [truthLoading, setTruthLoading] = useState(false)
   const [truthError, setTruthError] = useState<string | null>(null)
@@ -71,6 +82,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     truthProvider.getUrl(),
   )
   const [tick, setTick] = useState(0)
+  const [lightningTick, setLightningTick] = useState(0)
   const [truthTick, setTruthTick] = useState(0)
 
   useEffect(() => {
@@ -80,7 +92,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     ;(async () => {
       setLoading(true)
       try {
-        const [avail, radar, satellite, env, lghtMeta, lghtEvents] = await Promise.all([
+        const [avail, radar, satellite, env, lghtMeta] = await Promise.all([
           australianWeatherProvider.getAvailability(),
           australianWeatherProvider.getRadar({}),
           australianWeatherProvider.getSatellite({}),
@@ -89,8 +101,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
             PROTOTYPE_STORM.longitude,
             controller.signal,
           ),
-          lightningProvider.getAvailability(),
-          lightningProvider.getLightning({}, controller.signal).catch(() => [] as LightningObservation[]),
+          lightningProvider.getAvailability(controller.signal),
         ])
         if (cancelled) return
         const radarOk = radar.filter((f) => f.available && f.tileUrlTemplate)
@@ -98,7 +109,6 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
         setRadarFrames(radarOk)
         setSatelliteFrames(satellite.filter((f) => f.available && f.tileUrlTemplate))
         setEnvironment(env)
-        setLightningEvents(lghtEvents)
         setError(null)
       } catch (err) {
         if (cancelled) return
@@ -112,7 +122,39 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
       cancelled = true
       controller.abort()
     }
-  }, [tick, lightningProvider])
+  }, [tick, lightningProvider, lightningTick])
+
+  useEffect(() => {
+    if (!lightningProvider.configured()) {
+      setLightningEvents([])
+      setLightningError(null)
+      setLightningLoading(false)
+      setLightningSourceLabel(null)
+      return
+    }
+    const controller = new AbortController()
+    let cancelled = false
+    setLightningLoading(true)
+    ;(async () => {
+      try {
+        const events = await lightningProvider.getLightning({}, controller.signal)
+        if (cancelled) return
+        setLightningEvents(events)
+        setLightningError(null)
+        setLightningSourceLabel(lightningProvider.getUrl())
+      } catch (err) {
+        if (cancelled) return
+        setLightningEvents([])
+        setLightningError(err instanceof Error ? err.message : 'Lightning feed failed')
+      } finally {
+        if (!cancelled) setLightningLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [lightningProvider, lightningTick])
 
   useEffect(() => {
     if (!enableTracks) {
@@ -222,6 +264,19 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     }
   }, [truthProvider, truthTick])
 
+  const loadLightningSample = useCallback(() => {
+    lightningProvider.setUrl(sampleLightningUrl())
+    setLightningTick((n) => n + 1)
+  }, [lightningProvider])
+
+  const clearLightningFeed = useCallback(() => {
+    lightningProvider.setUrl(null)
+    setLightningEvents([])
+    setLightningError(null)
+    setLightningSourceLabel(null)
+    setLightningTick((n) => n + 1)
+  }, [lightningProvider])
+
   const loadTruthSample = useCallback(() => {
     truthProvider.setUrl(sampleTruthCellsUrl())
     setTruthTick((n) => n + 1)
@@ -285,7 +340,12 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     trackSkills,
     trackSkillSummary,
     lightningEvents,
-    lightningConfigured: lightningProvider.configured(),
+    lightningConfigured: lightningProvider.configured() || lightningEvents.length > 0,
+    lightningLoading,
+    lightningError,
+    lightningSourceLabel,
+    loadLightningSample,
+    clearLightningFeed,
     truthCells,
     truthConfigured: truthProvider.configured() || truthCells.length > 0,
     truthLoading,

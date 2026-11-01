@@ -1,6 +1,12 @@
-import type { LightningObservation, WeatherObservationMeta } from '../types/observations'
+import type {
+  LightningClassification,
+  LightningObservation,
+  LightningPolarity,
+  WeatherObservationMeta,
+} from '../types/observations'
 import type { WeatherQuery } from '../providers/types'
-import { AUS_COVERAGE } from '../../config/weather'
+import { AUS_COVERAGE, LIGHTNING_FEED } from '../../config/weather'
+import { normalizeQualityScore } from '../reconstruction/lightningQuality'
 
 export interface LightningGeoJsonFeature {
   type: 'Feature'
@@ -12,15 +18,107 @@ export interface LightningGeoJsonFeature {
     id?: string
     time?: string
     observedAt?: string
-    classification?: 'cloud_to_ground' | 'intra_cloud' | 'unknown'
+    classification?: LightningClassification
     peakCurrentKa?: number
     source?: string
+    network?: string
+    qualityScore?: number
+    quality?: number | string
+    confidence?: number
+    polarity?: LightningPolarity | string
+    multiplicity?: number
+    locationErrorKm?: number
+    errorEllipseKm?: number
+    note?: string
+    example?: boolean
   }
 }
 
 export interface LightningGeoJson {
   type: 'FeatureCollection'
   features: LightningGeoJsonFeature[]
+}
+
+function parsePolarity(raw: unknown): LightningPolarity | undefined {
+  if (raw === 'positive' || raw === 'negative' || raw === 'unknown') return raw
+  if (typeof raw === 'string') {
+    const s = raw.toLowerCase()
+    if (s === '+' || s === 'pos' || s === 'positive') return 'positive'
+    if (s === '-' || s === 'neg' || s === 'negative') return 'negative'
+  }
+  return undefined
+}
+
+function parseClassification(raw: unknown): LightningClassification {
+  if (raw === 'cloud_to_ground' || raw === 'intra_cloud' || raw === 'unknown') return raw
+  if (typeof raw === 'string') {
+    const s = raw.toLowerCase().replace(/[\s-]+/g, '_')
+    if (s === 'cg' || s === 'cloud_to_ground') return 'cloud_to_ground'
+    if (s === 'ic' || s === 'intra_cloud' || s === 'cloud_flash') return 'intra_cloud'
+  }
+  return 'unknown'
+}
+
+function parseFeatureCollection(data: unknown, sourceHint: string): LightningObservation[] {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Lightning feed must be a GeoJSON FeatureCollection of Points')
+  }
+  const fc = data as LightningGeoJson
+  if (fc.type !== 'FeatureCollection' || !Array.isArray(fc.features)) {
+    throw new Error('Lightning feed must be a GeoJSON FeatureCollection of Points')
+  }
+
+  return fc.features
+    .filter((f) => f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates))
+    .map((f, i) => {
+      const [lon, lat, alt] = f.geometry.coordinates
+      const observedAt = f.properties?.observedAt ?? f.properties?.time ?? new Date(0).toISOString()
+      const sourceId = f.properties?.source ?? sourceHint
+      const example = Boolean(f.properties?.example) || sourceId.includes('example')
+      const qualityScore = normalizeQualityScore(
+        f.properties?.qualityScore ?? f.properties?.confidence ?? f.properties?.quality,
+      )
+      const locationErrorKm =
+        typeof f.properties?.locationErrorKm === 'number'
+          ? f.properties.locationErrorKm
+          : typeof f.properties?.errorEllipseKm === 'number'
+            ? f.properties.errorEllipseKm
+            : undefined
+
+      return {
+        id: f.properties?.id ?? `lght-${i}-${observedAt}`,
+        productType: 'lightning_event' as const,
+        sourceId,
+        observedAt: new Date(observedAt).toISOString(),
+        available: true,
+        longitude: lon,
+        latitude: lat,
+        altitudeM: alt,
+        classification: parseClassification(f.properties?.classification),
+        peakCurrentKa: f.properties?.peakCurrentKa,
+        qualityScore,
+        network: f.properties?.network,
+        polarity: parsePolarity(f.properties?.polarity),
+        multiplicity:
+          typeof f.properties?.multiplicity === 'number' ? f.properties.multiplicity : undefined,
+        locationErrorKm,
+        quality:
+          qualityScore != null
+            ? `quality ${Math.round(qualityScore * 100)}%`
+            : typeof f.properties?.quality === 'string'
+              ? f.properties.quality
+              : undefined,
+        provenance: {
+          kind: 'direct' as const,
+          summary: example
+            ? 'Example lightning event for plumbing demos — not a live network detection.'
+            : 'Lightning event from configured GeoJSON feed.',
+          sourceId,
+          observedAt: new Date(observedAt).toISOString(),
+          qualityNote: f.properties?.note,
+        },
+      } satisfies LightningObservation
+    })
 }
 
 /**
@@ -38,7 +136,15 @@ export class GeoJsonLightningProvider {
     return Boolean(this.url && this.url.trim())
   }
 
-  async getAvailability(): Promise<WeatherObservationMeta> {
+  setUrl(url: string | null): void {
+    this.url = url?.trim() || null
+  }
+
+  getUrl(): string | null {
+    return this.url
+  }
+
+  async getAvailability(signal?: AbortSignal): Promise<WeatherObservationMeta> {
     if (!this.configured()) {
       return {
         id: 'lght-geojson',
@@ -50,13 +156,14 @@ export class GeoJsonLightningProvider {
         provenance: {
           kind: 'direct',
           summary:
-            'No lightning feed configured. Set VITE_LIGHTNING_GEOJSON_URL to a licensed FeatureCollection endpoint.',
+            'No lightning feed configured. Set VITE_LIGHTNING_GEOJSON_URL to a licensed FeatureCollection, or load the bundled sample for a quality-metadata demo.',
           sourceId: this.id,
         },
       }
     }
     try {
-      const events = await this.getLightning({})
+      const events = await this.getLightning({}, signal)
+      const withQuality = events.filter((e) => e.qualityScore != null).length
       return {
         id: 'lght-geojson',
         productType: 'lightning_event',
@@ -66,7 +173,7 @@ export class GeoJsonLightningProvider {
         coverage: { ...AUS_COVERAGE },
         provenance: {
           kind: 'direct',
-          summary: `Loaded ${events.length} lightning event(s) from configured GeoJSON feed.`,
+          summary: `Loaded ${events.length} lightning event(s) from configured GeoJSON feed (${withQuality} with qualityScore).`,
           sourceId: this.id,
           observedAt: events[0]?.observedAt,
         },
@@ -89,37 +196,12 @@ export class GeoJsonLightningProvider {
 
   async getLightning(query: WeatherQuery, signal?: AbortSignal): Promise<LightningObservation[]> {
     if (!this.configured()) return []
-    const res = await fetch(this.url!, { signal, headers: { Accept: 'application/geo+json, application/json' } })
+    const res = await fetch(this.url!, {
+      signal,
+      headers: { Accept: 'application/geo+json, application/json' },
+    })
     if (!res.ok) throw new Error(`Lightning GeoJSON request failed (${res.status})`)
-    const data = (await res.json()) as LightningGeoJson
-    if (data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
-      throw new Error('Lightning feed must be a GeoJSON FeatureCollection of Points')
-    }
-
-    let events = data.features
-      .filter((f) => f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates))
-      .map((f, i) => {
-        const [lon, lat, alt] = f.geometry.coordinates
-        const observedAt = f.properties?.observedAt ?? f.properties?.time ?? new Date(0).toISOString()
-        return {
-          id: f.properties?.id ?? `lght-${i}-${observedAt}`,
-          productType: 'lightning_event' as const,
-          sourceId: f.properties?.source ?? this.id,
-          observedAt: new Date(observedAt).toISOString(),
-          available: true,
-          longitude: lon,
-          latitude: lat,
-          altitudeM: alt,
-          classification: f.properties?.classification ?? 'unknown',
-          peakCurrentKa: f.properties?.peakCurrentKa,
-          provenance: {
-            kind: 'direct' as const,
-            summary: 'Lightning event from configured GeoJSON feed.',
-            sourceId: f.properties?.source ?? this.id,
-            observedAt: new Date(observedAt).toISOString(),
-          },
-        } satisfies LightningObservation
-      })
+    let events = parseFeatureCollection(await res.json(), this.id)
 
     if (query.range) {
       const start = Date.parse(query.range.start)
@@ -136,4 +218,8 @@ export class GeoJsonLightningProvider {
 export function createLightningProviderFromEnv(): GeoJsonLightningProvider {
   const url = (import.meta.env.VITE_LIGHTNING_GEOJSON_URL as string | undefined)?.trim() || null
   return new GeoJsonLightningProvider(url)
+}
+
+export function sampleLightningUrl(): string {
+  return LIGHTNING_FEED.samplePath
 }

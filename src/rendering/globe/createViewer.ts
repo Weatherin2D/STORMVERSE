@@ -26,6 +26,7 @@ import type {
   StormTrack,
 } from '../../weather/types/observations'
 import type { ReconstructionTarget } from '../../weather/reconstruction/mapToCloudParams'
+import { lightningMarkerColor } from '../../weather/reconstruction/lightningQuality'
 import {
   createGeoregisteredVolume,
   type GeoregisteredVolumeHandle,
@@ -375,13 +376,20 @@ export async function createStormverseGlobe(
     if (!lightningVisible) return
     for (const ev of events.slice(0, 400)) {
       const id = `lght-${ev.id}`
+      const fill = lightningMarkerColor(ev)
+      const size =
+        ev.classification === 'cloud_to_ground'
+          ? 7
+          : ev.qualityScore != null && ev.qualityScore >= 0.75
+            ? 6
+            : 4
       viewer.entities.add({
         id,
         position: Cartesian3.fromDegrees(ev.longitude, ev.latitude, ev.altitudeM ?? 6000),
         point: {
-          pixelSize: 5,
-          color: Color.fromCssColorString('#f5e6a6').withAlpha(0.9),
-          outlineColor: Color.fromCssColorString('#fff8d0').withAlpha(0.5),
+          pixelSize: size,
+          color: Color.fromCssColorString(fill).withAlpha(0.92),
+          outlineColor: Color.fromCssColorString('#fff8d0').withAlpha(0.45),
           outlineWidth: 1,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },

@@ -30,7 +30,18 @@ export {
 export {
   GeoJsonLightningProvider,
   createLightningProviderFromEnv,
+  sampleLightningUrl,
 } from './adapters/GeoJsonLightningAdapter'
+export {
+  DEFAULT_LIGHTNING_FILTER,
+  eventPassesLightningFilter,
+  filterLightningEvents,
+  lightningMarkerColor,
+  normalizeQualityScore,
+  summarizeLightningQuality,
+  type LightningQualityFilter,
+  type LightningQualitySummary,
+} from './reconstruction/lightningQuality'
 export {
   GeoJsonTruthCellsProvider,
   createTruthCellsProviderFromEnv,

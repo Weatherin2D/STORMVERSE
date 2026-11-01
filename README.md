@@ -26,7 +26,7 @@ VITE_LIGHTNING_GEOJSON_URL=      # optional licensed lightning FeatureCollection
 VITE_TRUTH_CELLS_GEOJSON_URL=    # optional licensed truth-cell FeatureCollection
 ```
 
-Lightning example schema: [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).  
+Lightning example schema (with quality metadata): [`public/samples/lightning.example.geojson`](public/samples/lightning.example.geojson).  
 Truth-cell example schema: [`public/samples/truth-cells.example.geojson`](public/samples/truth-cells.example.geojson).
 
 ### Scene snapshots & bookmarks
@@ -75,11 +75,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Gallery in the info panel: restore, rename, delete
 - Quick **Save bookmark** in the share control dock (auto-named)
 
-### 11 — Track verification hooks (current)
+### 11 — Track verification hooks
 - Optional GeoJSON truth-cell catalogue (`VITE_TRUTH_CELLS_GEOJSON_URL`)
 - Associate derived tracks by `stormId` or gated nearest neighbour
 - Load bundled sample / export current tracks as a stand-in template
 - Association scores are geometric gates — not published verification skill
+
+### 12 — Lightning quality metadata (current)
+- Parse `qualityScore` / network / polarity / multiplicity / location error from GeoJSON
+- Local min-quality + classification filters for globe markers
+- Load bundled sample feed; markers tint by classification/quality
+- Filters never invent detections — licensed URL still required for live networks
 
 ## Scientific integrity
 
@@ -94,7 +100,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | Globe volume / compare set | **Procedural**, georegistered |
 | Scene snapshot / bookmark | UI/state only — does not freeze live weather fields |
 | Immersive 3D storm | **Procedural** local scene |
-| Globe lightning | Direct only if you supply a licensed GeoJSON feed |
+| Globe lightning | Direct only from configured/sample GeoJSON — quality fields from feed |
 | Prototype storm / demo bolts | Synthetic |
 
 ## Known limitations
@@ -103,14 +109,14 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Snapshots and bookmarks cannot guarantee the same cells exist after catalogue refresh
 - Bookmarks are device-local (not synced); clearing site data removes them
 - Track “skill” and truth-association scores are not formal verification products
-- Sample truth cells are plumbing fixtures — replace with a licensed catalogue
+- Sample lightning / truth cells are plumbing fixtures — replace with licensed catalogues
 - Tracks empty when Australia mosaics lack precip
 
 ## Next ideas
 
-1. Licensed commercial/BoM lightning with quality metadata
+1. Wire lightning + truth hooks to licensed commercial/BoM products when available
 2. Radar volume / RHI products under proper licensing
-3. Wire verification hooks to a licensed truth-cell product when available
+3. Cross-product quality dashboards (radar ↔ lightning ↔ tracks)
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

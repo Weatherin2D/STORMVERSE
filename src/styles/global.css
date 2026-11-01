@@ -585,6 +585,42 @@ button {
   color: #e09a7a;
 }
 
+.lightning-quality-card .lightning-filters {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+.lightning-quality-card .lightning-filters label {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.lightning-quality-card .lightning-filters label.lightning-check {
+  grid-template-columns: auto 1fr;
+}
+
+.lightning-quality-card .lightning-filters input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.lightning-quality-card .lightning-filters select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--text);
+}
+
+.lightning-quality-card .lightning-sample {
+  margin-top: 4px;
+}
+
 .scene-share {
   position: relative;
 }

@@ -8,7 +8,12 @@
         "id": "example-lght-1",
         "observedAt": "2024-11-15T06:10:00.000Z",
         "classification": "intra_cloud",
+        "qualityScore": 0.92,
+        "network": "example-net-a",
+        "polarity": "unknown",
+        "locationErrorKm": 0.8,
         "source": "example-not-live",
+        "example": true,
         "note": "Example only — replace with a licensed feed via VITE_LIGHTNING_GEOJSON_URL"
       }
     },
@@ -20,7 +25,103 @@
         "observedAt": "2024-11-15T06:12:30.000Z",
         "classification": "cloud_to_ground",
         "peakCurrentKa": -24,
-        "source": "example-not-live"
+        "qualityScore": 0.88,
+        "network": "example-net-a",
+        "polarity": "negative",
+        "multiplicity": 3,
+        "locationErrorKm": 0.5,
+        "source": "example-not-live",
+        "example": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.05, -32.35, 7200] },
+      "properties": {
+        "id": "example-lght-3",
+        "observedAt": "2024-11-15T06:11:10.000Z",
+        "classification": "intra_cloud",
+        "qualityScore": 0.55,
+        "network": "example-net-b",
+        "locationErrorKm": 2.4,
+        "source": "example-not-live",
+        "example": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.22, -32.48, 2800] },
+      "properties": {
+        "id": "example-lght-4",
+        "observedAt": "2024-11-15T06:13:00.000Z",
+        "classification": "cloud_to_ground",
+        "peakCurrentKa": 41,
+        "qualityScore": 0.71,
+        "network": "example-net-a",
+        "polarity": "positive",
+        "multiplicity": 1,
+        "locationErrorKm": 1.1,
+        "source": "example-not-live",
+        "example": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.3, -32.6, 4100] },
+      "properties": {
+        "id": "example-lght-5",
+        "observedAt": "2024-11-15T06:14:20.000Z",
+        "classification": "cloud_to_ground",
+        "peakCurrentKa": -12,
+        "qualityScore": 0.33,
+        "network": "example-net-b",
+        "polarity": "negative",
+        "locationErrorKm": 4.5,
+        "source": "example-not-live",
+        "example": true,
+        "note": "Low-quality example for filter demos"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [148.95, -32.55, 6000] },
+      "properties": {
+        "id": "example-lght-6",
+        "observedAt": "2024-11-15T06:09:40.000Z",
+        "classification": "intra_cloud",
+        "confidence": 81,
+        "network": "example-net-a",
+        "source": "example-not-live",
+        "example": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.12, -32.62, 2500] },
+      "properties": {
+        "id": "example-lght-7",
+        "observedAt": "2024-11-15T06:15:05.000Z",
+        "classification": "cg",
+        "peakCurrentKa": -55,
+        "qualityScore": 0.96,
+        "network": "example-net-a",
+        "polarity": "negative",
+        "multiplicity": 5,
+        "errorEllipseKm": 0.4,
+        "source": "example-not-live",
+        "example": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [149.4, -32.3, 5500] },
+      "properties": {
+        "id": "example-lght-8",
+        "observedAt": "2024-11-15T06:16:00.000Z",
+        "classification": "unknown",
+        "source": "example-not-live",
+        "example": true,
+        "note": "Missing qualityScore — exercises allow-missing filter"
       }
     }
   ]

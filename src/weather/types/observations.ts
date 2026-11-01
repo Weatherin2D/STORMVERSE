@@ -79,6 +79,8 @@ export type LightningClassification =
   | 'intra_cloud'
   | 'unknown'
 
+export type LightningPolarity = 'positive' | 'negative' | 'unknown'
+
 export interface LightningObservation extends WeatherObservationMeta {
   productType: 'lightning_event'
   longitude: number
@@ -86,6 +88,15 @@ export interface LightningObservation extends WeatherObservationMeta {
   altitudeM?: number
   classification: LightningClassification
   peakCurrentKa?: number
+  /** Provider quality / confidence 0–1 when supplied by the feed. */
+  qualityScore?: number
+  /** Detection network or sensor group id from the licensed feed. */
+  network?: string
+  polarity?: LightningPolarity
+  /** Stroke multiplicity when reported. */
+  multiplicity?: number
+  /** Horizontal location uncertainty (km) when reported. */
+  locationErrorKm?: number
 }
 
 export interface StormTrackPoint {

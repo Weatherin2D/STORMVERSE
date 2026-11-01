@@ -20,7 +20,8 @@ export const OPEN_METEO = {
 
 /**
  * Optional licensed lightning FeatureCollection URL.
- * Example properties: time / observedAt, classification, peakCurrentKa, source.
+ * Example properties: observedAt, classification, peakCurrentKa, qualityScore,
+ * network, polarity, multiplicity, locationErrorKm, source.
  */
 export const LIGHTNING_FEED = {
   envKey: 'VITE_LIGHTNING_GEOJSON_URL',

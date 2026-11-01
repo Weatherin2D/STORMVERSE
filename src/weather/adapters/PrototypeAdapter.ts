@@ -88,6 +88,8 @@ export class PrototypeWeatherProvider implements WeatherProvider {
         PROTOTYPE_STORM.longitude + (pseudoRandom(seed * 3 + i) - 0.5) * 0.35
       const lat =
         PROTOTYPE_STORM.latitude + (pseudoRandom(seed * 5 + i) - 0.5) * 0.28
+      const classification = jitter > 0.55 ? 'cloud_to_ground' : 'intra_cloud'
+      const qualityScore = 0.35 + jitter * 0.6
       events.push({
         id: `proto-lght-${i}`,
         productType: 'lightning_event',
@@ -97,7 +99,19 @@ export class PrototypeWeatherProvider implements WeatherProvider {
         longitude: lon,
         latitude: lat,
         altitudeM: 4000 + jitter * 8000,
-        classification: jitter > 0.55 ? 'cloud_to_ground' : 'intra_cloud',
+        classification,
+        peakCurrentKa:
+          classification === 'cloud_to_ground' ? (jitter > 0.7 ? 28 : -18) * (0.6 + jitter) : undefined,
+        qualityScore,
+        network: 'prototype-synthetic',
+        polarity:
+          classification === 'cloud_to_ground'
+            ? jitter > 0.7
+              ? 'positive'
+              : 'negative'
+            : 'unknown',
+        multiplicity: classification === 'cloud_to_ground' ? 1 + Math.floor(jitter * 4) : undefined,
+        locationErrorKm: 0.5 + (1 - qualityScore) * 3,
         provenance: {
           kind: 'synthetic',
           summary: 'Synthetic lightning event for visual prototype.',

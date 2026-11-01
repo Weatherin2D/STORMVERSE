@@ -2,6 +2,9 @@ import { APP_NAME, PROTOTYPE_STORM } from '../../config/app'
 import type { ViewMode } from '../../lib/appState'
 import type { SceneBookmarkListItem } from '../../lib/sceneBookmarks'
 import type {
+  LightningObservation,
+  LightningQualityFilter,
+  LightningQualitySummary,
   ReconstructionTarget,
   StormTrack,
   TrackSkillScore,
@@ -15,6 +18,7 @@ import { australianWeatherProvider } from '../../weather'
 import { CrossSection } from '../scientific/CrossSection'
 import { TrackSkillCard } from '../scientific/TrackSkillCard'
 import { TrackVerificationCard } from '../scientific/TrackVerificationCard'
+import { LightningQualityCard } from '../scientific/LightningQualityCard'
 import { SceneBookmarkGallery } from '../controls/SceneBookmarkGallery'
 
 interface InfoPanelProps {
@@ -39,6 +43,13 @@ interface InfoPanelProps {
   tracksLoading: boolean
   lightningConfigured: boolean
   lightningCount: number
+  lightningVisibleCount: number
+  lightningLoading: boolean
+  lightningError: string | null
+  lightningSourceLabel: string | null
+  lightningEvents: LightningObservation[]
+  lightningFilter: LightningQualityFilter
+  lightningSummary: LightningQualitySummary | null
   loading: boolean
   error: string | null
   onClose: () => void
@@ -53,6 +64,9 @@ interface InfoPanelProps {
   onRemoveCompare: (trackId: string) => void
   onReturnGlobe: () => void
   onSelectTrack: (trackId: string) => void
+  onLightningFilterChange: (next: LightningQualityFilter) => void
+  onLoadLightningSample: () => void
+  onClearLightningFeed: () => void
   canUseTracksAsTruth: boolean
   onLoadTruthSample: () => void
   onUseTracksAsTruth: () => void
@@ -87,6 +101,13 @@ export function InfoPanel({
   tracksLoading,
   lightningConfigured,
   lightningCount,
+  lightningVisibleCount,
+  lightningLoading,
+  lightningError,
+  lightningSourceLabel,
+  lightningEvents,
+  lightningFilter,
+  lightningSummary,
   loading,
   error,
   volumePinned,
@@ -101,6 +122,9 @@ export function InfoPanel({
   onRemoveCompare,
   onReturnGlobe,
   onSelectTrack,
+  onLightningFilterChange,
+  onLoadLightningSample,
+  onClearLightningFeed,
   canUseTracksAsTruth,
   onLoadTruthSample,
   onUseTracksAsTruth,
@@ -160,12 +184,25 @@ export function InfoPanel({
           </div>
 
           <div className="availability">
-            <h3>Lightning feed</h3>
-            <p className="provenance">
-              {lightningConfigured
-                ? `${lightningCount} event(s) loaded from VITE_LIGHTNING_GEOJSON_URL.`
-                : 'Not configured. Point VITE_LIGHTNING_GEOJSON_URL at a licensed FeatureCollection (see public/samples/lightning.example.geojson).'}
-            </p>
+            <LightningQualityCard
+              configured={lightningConfigured}
+              loading={lightningLoading}
+              error={lightningError}
+              sourceLabel={lightningSourceLabel}
+              events={lightningEvents}
+              summary={lightningSummary}
+              filter={lightningFilter}
+              disabled={loading}
+              onFilterChange={onLightningFilterChange}
+              onLoadSample={onLoadLightningSample}
+              onClear={onClearLightningFeed}
+            />
+            {lightningConfigured && (
+              <p className="provenance">
+                Globe shows {lightningVisibleCount} of {lightningCount} feed event(s) after local
+                quality filters.
+              </p>
+            )}
           </div>
 
           <div className="availability">
@@ -439,7 +476,9 @@ export function InfoPanel({
             <div>
               <dt>Globe lightning</dt>
               <dd>
-                {lightningConfigured ? `${lightningCount} feed events` : 'Feed not configured'}
+                {lightningConfigured
+                  ? `${lightningVisibleCount}/${lightningCount} visible`
+                  : 'Feed not configured'}
               </dd>
             </div>
           </dl>

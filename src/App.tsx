@@ -22,11 +22,15 @@ import type { StormCameraPreset } from './rendering/storm/StormControls'
 import type { LightingMode } from './rendering/atmosphere/lighting'
 import type { CloudParams } from './rendering/clouds/CloudVolume'
 import {
+  DEFAULT_LIGHTNING_FILTER,
   downloadTruthCellsTemplate,
+  filterLightningEvents,
   interpolateTrackAtCursor,
   mapEnvironmentToReconstruction,
   prototypeProvider,
+  summarizeLightningQuality,
   type LightningObservation,
+  type LightningQualityFilter,
   type ReconstructionTarget,
 } from './weather'
 import { TIMELINE } from './config/app'
@@ -77,6 +81,18 @@ export default function App() {
   const snapshotAppliedRef = useRef(false)
   const [bookmarks, setBookmarks] = useState(() => listSceneBookmarks())
   const refreshBookmarks = useCallback(() => setBookmarks(listSceneBookmarks()), [])
+  const [lightningFilter, setLightningFilter] = useState<LightningQualityFilter>(
+    () => ({ ...DEFAULT_LIGHTNING_FILTER }),
+  )
+
+  const filteredLightningEvents = useMemo(
+    () => filterLightningEvents(live.lightningEvents, lightningFilter),
+    [live.lightningEvents, lightningFilter],
+  )
+  const lightningQualitySummary = useMemo(
+    () => summarizeLightningQuality(live.lightningEvents, filteredLightningEvents),
+    [live.lightningEvents, filteredLightningEvents],
+  )
 
   useEffect(() => {
     setState((s) => ({ ...s, reducedFlash: reducedMotion || s.reducedFlash }))
@@ -204,7 +220,9 @@ export default function App() {
             : ''
       const lghtNote =
         live.lightningConfigured && live.lightningEvents.length > 0
-          ? ` · ${live.lightningEvents.length} lightning`
+          ? filteredLightningEvents.length === live.lightningEvents.length
+            ? ` · ${live.lightningEvents.length} lightning`
+            : ` · ${filteredLightningEvents.length}/${live.lightningEvents.length} lightning`
           : ''
       return {
         ...s,
@@ -226,6 +244,7 @@ export default function App() {
     live.tracksLoading,
     live.lightningConfigured,
     live.lightningEvents.length,
+    filteredLightningEvents.length,
     state.layers.tracks,
   ])
 
@@ -279,13 +298,16 @@ export default function App() {
   const lastLightningId = useRef<string | null>(null)
   useEffect(() => {
     if (state.viewMode !== 'storm' || !state.layers.lightning) return
-    if (live.lightningEvents.length > 0 && reconMode === 'cell') {
+    if (filteredLightningEvents.length > 0 && reconMode === 'cell') {
       // Map timeline cursor into feed events by index cadence
       const idx = Math.min(
-        live.lightningEvents.length - 1,
-        Math.floor((state.timeline.cursor / Math.max(1, state.timeline.max)) * live.lightningEvents.length),
+        filteredLightningEvents.length - 1,
+        Math.floor(
+          (state.timeline.cursor / Math.max(1, state.timeline.max)) *
+            filteredLightningEvents.length,
+        ),
       )
-      const hit = live.lightningEvents[idx]
+      const hit = filteredLightningEvents[idx]
       if (hit && hit.id !== lastLightningId.current) {
         lastLightningId.current = hit.id
         setLightningEvent(hit)
@@ -312,7 +334,7 @@ export default function App() {
     state.layers.lightning,
     state.timeline.speed,
     syntheticLightning,
-    live.lightningEvents,
+    filteredLightningEvents,
     reconMode,
   ])
 
@@ -809,7 +831,7 @@ export default function App() {
             satelliteAvailable={live.satelliteFrames.length > 0}
             tracksLoading={live.tracksLoading}
             lightningConfigured={live.lightningConfigured}
-            lightningCount={live.lightningEvents.length}
+            lightningCount={filteredLightningEvents.length}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             chaseVolume={chaseVolume}
@@ -878,6 +900,13 @@ export default function App() {
             tracksLoading={live.tracksLoading}
             lightningConfigured={live.lightningConfigured}
             lightningCount={live.lightningEvents.length}
+            lightningVisibleCount={filteredLightningEvents.length}
+            lightningLoading={live.lightningLoading}
+            lightningError={live.lightningError}
+            lightningSourceLabel={live.lightningSourceLabel}
+            lightningEvents={live.lightningEvents}
+            lightningFilter={lightningFilter}
+            lightningSummary={lightningQualitySummary}
             volumePinned={pinnedVolumeMode === 'cell'}
             followTrack={followTrack}
             loading={live.loading}
@@ -892,6 +921,23 @@ export default function App() {
             onRemoveCompare={removeFromCompare}
             onReturnGlobe={returnGlobe}
             onSelectTrack={setSelectedTrackId}
+            onLightningFilterChange={setLightningFilter}
+            onLoadLightningSample={() => {
+              live.loadLightningSample()
+              setState((s) => ({
+                ...s,
+                panelOpen: true,
+                layers: { ...s.layers, lightningObs: true },
+                statusMessage: 'Loading sample lightning feed (example only)',
+              }))
+            }}
+            onClearLightningFeed={() => {
+              live.clearLightningFeed()
+              setState((s) => ({
+                ...s,
+                statusMessage: 'Lightning feed cleared',
+              }))
+            }}
             canUseTracksAsTruth={live.tracks.length > 0}
             onLoadTruthSample={() => {
               live.loadTruthSample()
@@ -988,7 +1034,7 @@ export default function App() {
           tracksVisible={state.layers.tracks}
           selectedTrackId={selectedTrackId}
           trackSkillById={trackSkillById}
-          lightningEvents={live.lightningEvents}
+          lightningEvents={filteredLightningEvents}
           lightningVisible={state.layers.lightningObs}
           volumeTarget={globeVolumeTarget}
           volumeTargets={globeVolumeTargets}
