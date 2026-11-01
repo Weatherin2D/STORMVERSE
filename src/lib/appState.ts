@@ -20,11 +20,13 @@ export interface LayerState {
 }
 
 export interface TimelineState {
+  /** Legacy snapshot field — live mode never auto-plays frame loops. */
   playing: boolean
-  /** Index into radar/satellite frame list (fractional while playing). */
+  /** Always pinned to the latest mosaic frame in live mode. */
   cursor: number
+  /** Legacy snapshot field — unused while live (no scrub playback). */
   speed: number
-  /** Frame count - 1. */
+  /** Frame count - 1 (latest index). */
   max: number
 }
 
@@ -54,7 +56,7 @@ export function createInitialAppState(reducedMotion: boolean): AppState {
       volume: true,
     },
     timeline: {
-      playing: true,
+      playing: false,
       cursor: 0,
       speed: TIMELINE.defaultSpeed,
       max: 0,

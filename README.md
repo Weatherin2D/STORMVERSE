@@ -52,7 +52,7 @@ Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShe
 Cesium Earth, typed weather interfaces, early immersive scaffolding (later replaced by global atmosphere).
 
 ### 2 — Live observation overlays
-RainViewer radar mosaics, observation timeline, optional IR, Open-Meteo site context.
+RainViewer radar mosaics, live observation clock (current frame only), optional IR, Open-Meteo site context.
 
 ### 3 — Derived tracks + science context
 Heuristic cell tracks from mosaics, CAPE/CIN, schematic cross-section with provenance.

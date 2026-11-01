@@ -393,6 +393,44 @@ button {
   accent-color: var(--accent);
 }
 
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 220, 160, 0.45);
+  background: rgba(40, 120, 80, 0.25);
+  color: #9eecc0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.live-pill::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6dffb0;
+  box-shadow: 0 0 8px rgba(109, 255, 176, 0.8);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-frame-count {
+  margin-right: 4px;
+}
+
 .timeline-note {
   margin: 0;
   font-size: 11px;

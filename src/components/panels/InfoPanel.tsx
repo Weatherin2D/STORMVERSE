@@ -459,7 +459,7 @@ export function InfoPanel({
                 </div>
                 <div>
                   <dt>Follow track</dt>
-                  <dd>{followTrack && volumePinned ? 'Animating with timeline' : 'Static pin'}</dd>
+                  <dd>{followTrack && volumePinned ? 'Pinned at live track head' : 'Static pin'}</dd>
                 </div>
                 <div>
                   <dt>Along track</dt>

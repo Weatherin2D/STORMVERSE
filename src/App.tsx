@@ -11,7 +11,6 @@ import {
   decodeSceneHash,
   downloadSceneSnapshot,
   encodeSceneHash,
-  resolveTimelineCursor,
   snapshotFromJson,
   type SceneSnapshot,
 } from './lib/sceneSnapshot'
@@ -82,12 +81,8 @@ export default function App() {
 
   const radarObservedAt = useMemo(() => {
     if (live.radarFrames.length === 0) return null
-    const idx = Math.min(
-      live.radarFrames.length - 1,
-      Math.max(0, Math.round(state.timeline.cursor)),
-    )
-    return live.radarFrames[idx]?.observedAt ?? null
-  }, [live.radarFrames, state.timeline.cursor])
+    return live.radarFrames[live.radarFrames.length - 1]?.observedAt ?? null
+  }, [live.radarFrames])
 
   const syncObservedAt =
     lightningSyncMode === 'case'
@@ -196,7 +191,11 @@ export default function App() {
       if (!track) return
       const pose =
         followTrack && live.radarFrames.length > 0
-          ? interpolateTrackAtCursor(track, live.radarFrames, state.timeline.cursor)
+          ? interpolateTrackAtCursor(
+              track,
+              live.radarFrames,
+              live.radarFrames.length - 1,
+            )
           : null
       const base = mapEnvironmentToReconstruction(live.environment, track, pose)
       out.push({
@@ -214,7 +213,6 @@ export default function App() {
     live.radarFrames,
     live.environment,
     followTrack,
-    state.timeline.cursor,
   ])
 
   const globeVolumeTargets = useMemo(() => {
@@ -274,12 +272,13 @@ export default function App() {
         timeline: {
           ...s.timeline,
           max,
-          cursor: Math.min(s.timeline.cursor, max) || max,
-          playing: true,
+          // Live recreation: always the latest mosaic, never a looping scrub.
+          cursor: max,
+          playing: false,
         },
         statusMessage: live.error
           ? `Radar feed error: ${live.error}`
-          : `Live radar · ${live.radarFrames.length} frames${trackNote}${cloudNote}${lghtNote}`,
+          : `Live weather · current mosaic${trackNote}${cloudNote}${lghtNote}`,
       }
     })
   }, [
@@ -296,42 +295,13 @@ export default function App() {
     state.layers.tracks,
   ])
 
-  useEffect(() => {
-    if (!state.timeline.playing) return
-    let frame = 0
-    let last = performance.now()
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000)
-      last = now
-      setState((s) => {
-        if (!s.timeline.playing) return s
-        const next = s.timeline.cursor + dt * s.timeline.speed * (1 / 0.7)
-        const wrapped = next > s.timeline.max ? 0 : next
-        return { ...s, timeline: { ...s.timeline, cursor: wrapped } }
-      })
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [state.timeline.playing, state.timeline.speed])
-
-  const radarIndex = Math.min(
-    live.radarFrames.length - 1,
-    Math.max(0, Math.round(state.timeline.cursor)),
-  )
-  const radarFrame = live.radarFrames.length > 0 ? live.radarFrames[radarIndex] : null
-
-  const satIndex = Math.min(
-    live.satelliteFrames.length - 1,
-    Math.max(0, Math.round(state.timeline.cursor)),
-  )
+  // Always the current (latest) observation — not a historical animation cursor.
+  const radarFrame =
+    live.radarFrames.length > 0 ? live.radarFrames[live.radarFrames.length - 1] : null
   const satelliteFrame =
     state.layers.satellite && live.satelliteFrames.length > 0
-      ? live.satelliteFrames[Math.min(satIndex, live.satelliteFrames.length - 1)]
-      : live.satelliteFrames.length > 0
-        ? live.satelliteFrames[live.satelliteFrames.length - 1]
-        : null
-
+      ? live.satelliteFrames[live.satelliteFrames.length - 1]
+      : null
   const immersiveFocus = useMemo(() => {
     if (selectedTrack) {
       const head = selectedTrack.points[selectedTrack.points.length - 1]
@@ -351,7 +321,7 @@ export default function App() {
     const pose = interpolateTrackAtCursor(
       selectedTrack,
       live.radarFrames,
-      state.timeline.cursor,
+      Math.max(0, live.radarFrames.length - 1),
     )
     const recon = mapEnvironmentToReconstruction(live.environment, selectedTrack, pose)
     setPinnedVolumeMode('cell')
@@ -375,7 +345,7 @@ export default function App() {
       token: Date.now(),
       oblique: true,
     })
-  }, [live.environment, live.radarFrames, selectedTrack, state.timeline.cursor])
+  }, [live.environment, live.radarFrames, selectedTrack])
 
   const addSelectedToCompare = useCallback(() => {
     if (!selectedTrack) return
@@ -389,7 +359,11 @@ export default function App() {
     setSelectedTrackId(top[0].id)
     setPinnedVolumeMode('cell')
     setFollowTrack(true)
-    const pose = interpolateTrackAtCursor(top[0], live.radarFrames, state.timeline.cursor)
+    const pose = interpolateTrackAtCursor(
+      top[0],
+      live.radarFrames,
+      Math.max(0, live.radarFrames.length - 1),
+    )
     const recon = mapEnvironmentToReconstruction(live.environment, top[0], pose)
     setState((s) => ({
       ...s,
@@ -404,7 +378,7 @@ export default function App() {
       token: Date.now(),
       oblique: true,
     })
-  }, [live.tracks, live.radarFrames, live.environment, state.timeline.cursor])
+  }, [live.tracks, live.radarFrames, live.environment])
 
   const clearCompare = useCallback(() => {
     setCompareTrackIds([])
@@ -443,10 +417,10 @@ export default function App() {
       viewMode: 'globe',
       statusMessage:
         live.radarFrames.length > 0
-          ? `Live radar · ${live.radarFrames.length} frames · RainViewer`
+          ? 'Live weather · current RainViewer mosaic'
           : 'Returned to exploration view',
       timeline: {
-        playing: true,
+        playing: false,
         cursor: max,
         speed: TIMELINE.defaultSpeed,
         max,
@@ -467,9 +441,7 @@ export default function App() {
     )
     const observedAt =
       live.radarFrames.length > 0
-        ? live.radarFrames[
-            Math.min(live.radarFrames.length - 1, Math.max(0, Math.round(state.timeline.cursor)))
-          ]?.observedAt
+        ? live.radarFrames[live.radarFrames.length - 1]?.observedAt
         : null
     return buildSceneSnapshot({
       viewMode: state.viewMode,
@@ -535,11 +507,6 @@ export default function App() {
         live.tracks[0]?.id ??
         null
 
-      const cursor = resolveTimelineCursor(snap, {
-        frameCount: live.radarFrames.length,
-        observedAts: live.radarFrames.map((f) => f.observedAt),
-        stormDurationSec: 0,
-      })
       const max = Math.max(0, live.radarFrames.length - 1)
       const pinnedMode =
         snap.exploration.pinnedVolumeMode === 'cell' ? ('cell' as const) : null
@@ -568,9 +535,10 @@ export default function App() {
         reducedFlash: snap.exploration.reducedFlash,
         panelOpen: snap.exploration.panelOpen,
         timeline: {
-          playing: snap.timeline.playing,
+          // Snapshots restore layers/camera; weather stays on the live current frame.
+          playing: false,
           speed: snap.timeline.speed,
-          cursor,
+          cursor: max,
           max,
         },
         statusMessage: `Restored scene snapshot · ${snap.exportedAt.replace('T', ' ').slice(0, 19)}Z`,
@@ -995,30 +963,15 @@ export default function App() {
             onDeleteBookmark={removeBookmark}
           />
           <TimelineBar
-            viewMode={state.viewMode}
-            timeline={state.timeline}
             clockLabel={clockLabel}
             note={
               followTrack && pinnedVolumeMode === 'cell'
-                ? compareTrackIds.length > 1
-                  ? 'Scrubs radar frames and walks all compare volumes along their derived tracks.'
-                  : 'Scrubs radar frames and walks the pinned procedural volume along the derived track.'
-                : 'Scrubs RainViewer composite radar frames — processed imagery, not a BoM volume product. Sun lighting follows observation UTC when Follow sun is active.'
+                ? 'Live mosaic only — pinned volumes sit at the latest derived-track pose (not scrubbed history).'
+                : 'Live Earth weather from the current RainViewer mosaic — processed imagery, not a BoM volume product. Sun lighting follows observation UTC when Follow sun is active.'
             }
-            badge="Observation time"
-            onChange={(partial) =>
-              setState((s) => ({ ...s, timeline: { ...s.timeline, ...partial } }))
-            }
-            onReset={() =>
-              setState((s) => ({
-                ...s,
-                timeline: {
-                  ...s.timeline,
-                  cursor: s.timeline.max,
-                  playing: true,
-                },
-              }))
-            }
+            badge="Live observation"
+            frameCount={live.radarFrames.length}
+            onRefreshLive={() => live.refresh()}
           />
         </>
       }
