@@ -31,6 +31,18 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: 'true'
+      # vite-plugin-cesium copies into dist/<base>/cesium when base is /STORMVERSE/,
+      # but Pages serves the artifact root at /STORMVERSE/ — flatten to dist/cesium.
+      - name: Fix Cesium path for project Pages
+        run: |
+          if [ -d dist/STORMVERSE/cesium ]; then
+            rm -rf dist/cesium
+            mv dist/STORMVERSE/cesium dist/cesium
+            rm -rf dist/STORMVERSE
+          fi
+          test -f dist/index.html
+          test -f dist/cesium/Cesium.js
+          test -d dist/assets
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -11,6 +11,8 @@ npm run dev
 
 Open [http://127.0.0.1:43127](http://127.0.0.1:43127).
 
+Live site (GitHub Pages): [https://weatherin2d.github.io/STORMVERSE/](https://weatherin2d.github.io/STORMVERSE/).
+
 ```bash
 npm run build
 npm run preview
