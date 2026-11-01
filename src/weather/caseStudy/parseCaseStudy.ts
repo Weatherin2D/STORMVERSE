@@ -2,7 +2,11 @@ import { parseLightningFeatureCollection } from '../adapters/GeoJsonLightningAda
 import { parseTruthFeatureCollection } from '../adapters/GeoJsonTruthCellsAdapter'
 import type { StormTrack, StormTrackPoint } from '../types/observations'
 import type { Provenance, ProvenanceKind } from '../types/provenance'
-import { CASE_STUDY_VERSION, type CaseStudyPack } from './types'
+import {
+  CASE_STUDY_VERSION,
+  type CaseStudyImportAttestation,
+  type CaseStudyPack,
+} from './types'
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : null
@@ -142,4 +146,87 @@ export async function fetchCaseStudyPack(
   const parsed = parseCaseStudyPack(await res.json(), url)
   if (!parsed) throw new Error('Invalid STORMVERSE case-study pack')
   return parsed
+}
+
+export function parseCaseStudyPackFromText(
+  text: string,
+  sourceLabel?: string,
+): CaseStudyPack {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    throw new Error('Case study file is not valid JSON')
+  }
+  const parsed = parseCaseStudyPack(raw, sourceLabel)
+  if (!parsed) throw new Error('Invalid STORMVERSE case-study pack')
+  return parsed
+}
+
+/**
+ * Attach a user licence attestation. Refuses empty notes.
+ */
+export function attachCaseStudyAttestation(
+  pack: CaseStudyPack,
+  opts: { licenceNote: string; sourceFilename?: string },
+): CaseStudyPack {
+  const licenceNote = opts.licenceNote.trim()
+  if (!licenceNote) {
+    throw new Error('Licence / rights note is required to import a case study')
+  }
+  const attestation: CaseStudyImportAttestation = {
+    attestedAt: new Date().toISOString(),
+    licenceNote: licenceNote.slice(0, 500),
+    sourceFilename: opts.sourceFilename,
+    attestedByUser: true,
+  }
+  return {
+    ...pack,
+    sourcePath: opts.sourceFilename ? `import://${opts.sourceFilename}` : pack.sourcePath,
+    importAttestation: attestation,
+    provenance: {
+      ...pack.provenance,
+      summary: `${pack.provenance.summary} Imported with user licence attestation.`,
+      qualityNote: [
+        pack.provenance.qualityNote,
+        `User attestation: ${attestation.licenceNote}`,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    },
+  }
+}
+
+/** Minimal valid template for user-authored packs. */
+export function emptyCaseStudyTemplate(): string {
+  const now = new Date().toISOString()
+  const pack = {
+    version: CASE_STUDY_VERSION,
+    id: 'user-case-study-01',
+    title: 'User case study',
+    region: 'Australia',
+    focusObservedAt: now,
+    timeRange: { start: now, end: now },
+    focus: { longitude: 149.12, latitude: -32.45 },
+    provenance: {
+      kind: 'direct',
+      summary: 'User-supplied case-study pack. Replace sensors with licensed archive extracts.',
+      sourceId: 'user-import',
+      observedAt: now,
+    },
+    tracks: [],
+    truthCells: { type: 'FeatureCollection', features: [] },
+    lightning: { type: 'FeatureCollection', features: [] },
+  }
+  return `${JSON.stringify(pack, null, 2)}\n`
+}
+
+export function downloadCaseStudyTemplate(filename = 'stormverse-case-study-template.json'): void {
+  const blob = new Blob([emptyCaseStudyTemplate()], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }

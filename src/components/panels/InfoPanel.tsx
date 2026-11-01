@@ -84,6 +84,10 @@ interface InfoPanelProps {
   onClearLightningFeed: () => void
   onLightningSyncModeChange: (mode: LightningSyncMode) => void
   onLoadCaseStudyById: (id: string) => void
+  onImportCaseStudyText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string },
+  ) => { ok: boolean; message: string }
   onClearCaseStudy: () => void
   canUseTracksAsTruth: boolean
   onLoadTruthSample: () => void
@@ -153,6 +157,7 @@ export function InfoPanel({
   onClearLightningFeed,
   onLightningSyncModeChange,
   onLoadCaseStudyById,
+  onImportCaseStudyText,
   onClearCaseStudy,
   canUseTracksAsTruth,
   onLoadTruthSample,
@@ -222,6 +227,7 @@ export function InfoPanel({
             syncMode={lightningSyncMode}
             disabled={loading}
             onLoadById={onLoadCaseStudyById}
+            onImportText={onImportCaseStudyText}
             onClear={onClearCaseStudy}
             onSyncModeChange={onLightningSyncModeChange}
           />

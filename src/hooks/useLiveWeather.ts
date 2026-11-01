@@ -33,6 +33,10 @@ import {
   type CaseStudyCatalog,
   type CaseStudyCatalogEntry,
 } from '../weather/caseStudy/catalog'
+import {
+  attachCaseStudyAttestation,
+  parseCaseStudyPackFromText,
+} from '../weather/caseStudy/parseCaseStudy'
 import type { CaseStudyPack } from '../weather/caseStudy/types'
 
 export interface LiveWeatherState {
@@ -73,6 +77,10 @@ export interface LiveWeatherState {
   loadCaseStudyById: (id: string) => void
   /** @deprecated Prefer loadCaseStudyById — loads the first catalog entry / NSW pack. */
   loadCaseStudySample: () => void
+  importCaseStudyText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string },
+  ) => { ok: boolean; message: string }
   clearCaseStudy: () => void
   refresh: () => void
 }
@@ -391,6 +399,27 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     loadCaseStudyById('nsw-corridor-example-01')
   }, [caseStudyCatalog, loadCaseStudyEntry, loadCaseStudyById])
 
+  const importCaseStudyText = useCallback(
+    (text: string, opts: { licenceNote: string; sourceFilename?: string }) => {
+      try {
+        const parsed = parseCaseStudyPackFromText(text, opts.sourceFilename)
+        const attested = attachCaseStudyAttestation(parsed, opts)
+        lightningProvider.setUrl(null)
+        truthProvider.setUrl(null)
+        applyCaseStudyPack(attested)
+        return {
+          ok: true,
+          message: `Imported “${attested.title}” with licence attestation`,
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Case study import failed'
+        setCaseStudyError(message)
+        return { ok: false, message }
+      }
+    },
+    [lightningProvider, truthProvider, applyCaseStudyPack],
+  )
+
   const loadLightningSample = useCallback(() => {
     setCaseStudy(null)
     lightningProvider.setUrl(sampleLightningUrl())
@@ -505,6 +534,7 @@ export function useLiveWeather(enableTracks: boolean): LiveWeatherState {
     loadCaseStudyCatalog,
     loadCaseStudyById,
     loadCaseStudySample,
+    importCaseStudyText,
     clearCaseStudy,
     refresh: () => setTick((n) => n + 1),
   }

@@ -1049,6 +1049,22 @@ export default function App() {
                 statusMessage: `Loading case study ${id} (check catalog licence note)`,
               }))
             }}
+            onImportCaseStudyText={(text, opts) => {
+              const result = live.importCaseStudyText(text, opts)
+              if (result.ok) {
+                setSelectedTrackId(null)
+                setCompareTrackIds([])
+                setState((s) => ({
+                  ...s,
+                  panelOpen: true,
+                  layers: { ...s.layers, tracks: true, lightningObs: true },
+                  statusMessage: result.message,
+                }))
+              } else {
+                setState((s) => ({ ...s, statusMessage: result.message }))
+              }
+              return result
+            }}
             onClearCaseStudy={() => {
               live.clearCaseStudy()
               setSelectedTrackId(null)

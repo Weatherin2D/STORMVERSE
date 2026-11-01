@@ -55,7 +55,11 @@ export {
 } from './reconstruction/crossProductQuality'
 export {
   parseCaseStudyPack,
+  parseCaseStudyPackFromText,
   fetchCaseStudyPack,
+  attachCaseStudyAttestation,
+  emptyCaseStudyTemplate,
+  downloadCaseStudyTemplate,
 } from './caseStudy/parseCaseStudy'
 export {
   buildSchematicRhi,
@@ -67,6 +71,7 @@ export {
   CASE_STUDY_VERSION,
   type CaseStudyMeta,
   type CaseStudyPack,
+  type CaseStudyImportAttestation,
   type LightningSyncMode,
 } from './caseStudy/types'
 export {

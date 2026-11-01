@@ -15,11 +15,22 @@ export interface CaseStudyMeta {
   sourcePath?: string
 }
 
+/** User attestation recorded when importing a local pack (M17). */
+export interface CaseStudyImportAttestation {
+  attestedAt: string
+  /** Free-text licence / rights note supplied by the importer. */
+  licenceNote: string
+  sourceFilename?: string
+  /** Always true when present — import UI refuses without explicit attestation. */
+  attestedByUser: true
+}
+
 export interface CaseStudyPack extends CaseStudyMeta {
   version: typeof CASE_STUDY_VERSION
   lightning: LightningObservation[]
   truthCells: TruthCell[]
   tracks: StormTrack[]
+  importAttestation?: CaseStudyImportAttestation
 }
 
 export type LightningSyncMode = 'off' | 'radar' | 'case'

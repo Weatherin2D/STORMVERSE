@@ -106,11 +106,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Optional lightning marks projected into a track corridor
 - Explicitly **not** a measured radar volume or BoM RHI product
 
-### 16 — Multi-case study library (current)
+### 16 — Multi-case study library
 - Catalog of example packs (NSW, SE Qld, SW WA) with licence notes per entry
 - In-app picker loads packs by id; clear returns to live derived tracks
 - `example-fixture` vs `user-licensed` labels — bundled packs are fixtures only
 - Ready to point catalog paths at licensed archives when available
+
+### 17 — User case-study import (current)
+- Import a local STORMVERSE case-study JSON with required rights attestation
+- Licence / rights note stored on the loaded pack provenance
+- Download an empty template pack; no scraping or fabricated archives
+- Import refused without attestation checkbox + non-empty licence note
 
 ## Scientific integrity
 
@@ -118,7 +124,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 | --- | --- |
 | Radar mosaic | Processed RainViewer imagery |
 | Cell tracks | Derived heuristic (low confidence) |
-| Case-study tracks / lightning / truth | Example/archive fixtures unless marked user-licensed |
+| Case-study tracks / lightning / truth | Example fixtures or user-attested imports — not scraped |
 | Tracking quality / “skill” | **Derived** self-consistency proxy — not verified skill |
 | Track–truth association | Optional gated match to user catalogue — not BoM skill |
 | Cross-product coherence | Exploratory readiness / co-location hint — not multi-sensor skill |
@@ -140,13 +146,14 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Sample lightning / truth / case-study packs are plumbing fixtures — replace with licensed catalogues
 - Case-study clock and live radar times are independent by design
 - Schematic RHI colour bands are not calibrated dBZ
+- User import attestation is self-declared — STORMVERSE cannot verify third-party licences
 - Tracks empty when Australia mosaics lack precip (unless a case study is loaded)
 
 ## Next ideas
 
 1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
 2. Licensed radar volume / true RHI products under proper licensing
-3. User-supplied case-study import with licence attestation
+3. Persist attested imports in a local library shelf (still device-local)
 
 Do not scrape restricted services. Respect provider terms and licensing.
 

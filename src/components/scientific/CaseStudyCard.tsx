@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react'
 import type { CaseStudyCatalog, CaseStudyCatalogEntry, CaseStudyPack } from '../../weather'
 import type { LightningSyncMode } from '../../weather'
+import { downloadCaseStudyTemplate } from '../../weather'
 
 interface CaseStudyCardProps {
   caseStudy: CaseStudyPack | null
@@ -11,6 +13,10 @@ interface CaseStudyCardProps {
   syncMode: LightningSyncMode
   disabled?: boolean
   onLoadById: (id: string) => void
+  onImportText: (
+    text: string,
+    opts: { licenceNote: string; sourceFilename?: string },
+  ) => { ok: boolean; message: string }
   onClear: () => void
   onSyncModeChange: (mode: LightningSyncMode) => void
 }
@@ -29,10 +35,17 @@ export function CaseStudyCard({
   syncMode,
   disabled,
   onLoadById,
+  onImportText,
   onClear,
   onSyncModeChange,
 }: CaseStudyCardProps) {
+  const fileRef = useRef<HTMLInputElement>(null)
   const entries = catalog?.entries ?? []
+  const [licenceNote, setLicenceNote] = useState('')
+  const [attested, setAttested] = useState(false)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
+
+  const canImport = attested && licenceNote.trim().length > 0 && !disabled && !loading
 
   return (
     <div className="availability case-study-card">
@@ -71,10 +84,84 @@ export function CaseStudyCard({
         </ul>
       )}
 
-      <div className="verify-actions">
-        <button type="button" disabled={disabled || !caseStudy} onClick={onClear}>
-          Clear case study
-        </button>
+      <div className="case-import">
+        <h4>Import your pack</h4>
+        <p className="provenance">
+          Upload a STORMVERSE case-study JSON. Import requires an explicit rights attestation — we
+          do not scrape or invent archive data for you.
+        </p>
+        <label className="case-import-note">
+          <span>Licence / rights note</span>
+          <input
+            type="text"
+            maxLength={500}
+            placeholder="e.g. Licensed BoM archive extract for internal research…"
+            disabled={disabled}
+            value={licenceNote}
+            onChange={(e) => setLicenceNote(e.target.value)}
+          />
+        </label>
+        <label className="lightning-check case-attest">
+          <input
+            type="checkbox"
+            disabled={disabled}
+            checked={attested}
+            onChange={(e) => setAttested(e.target.checked)}
+          />
+          <span>
+            I attest I have the rights to use this pack in STORMVERSE and that it is not obtained by
+            scraping restricted services.
+          </span>
+        </label>
+        <div className="verify-actions">
+          <button
+            type="button"
+            className="primary"
+            disabled={!canImport}
+            onClick={() => fileRef.current?.click()}
+          >
+            Import JSON…
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => downloadCaseStudyTemplate()}
+          >
+            Download template
+          </button>
+          <button type="button" disabled={disabled || !caseStudy} onClick={onClear}>
+            Clear case study
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (!file) return
+            if (!attested || !licenceNote.trim()) {
+              setImportMessage('Attestation and licence note are required before import')
+              return
+            }
+            try {
+              const text = await file.text()
+              const result = onImportText(text, {
+                licenceNote,
+                sourceFilename: file.name,
+              })
+              setImportMessage(result.message)
+              if (result.ok) {
+                setAttested(false)
+              }
+            } catch {
+              setImportMessage('Failed to read file')
+            }
+          }}
+        />
+        {importMessage && <p className="provenance">{importMessage}</p>}
       </div>
 
       {loading && <p className="provenance">Loading case study…</p>}
@@ -109,6 +196,16 @@ export function CaseStudyCard({
               </dd>
             </div>
           </dl>
+          {caseStudy.importAttestation && (
+            <p className="provenance">
+              <strong>Import attestation:</strong> {caseStudy.importAttestation.licenceNote}
+              {caseStudy.importAttestation.sourceFilename
+                ? ` · file ${caseStudy.importAttestation.sourceFilename}`
+                : ''}
+              {' · '}
+              {caseStudy.importAttestation.attestedAt}
+            </p>
+          )}
           <p className="provenance">
             <strong>Provenance:</strong> {caseStudy.provenance.summary}
           </p>
@@ -117,8 +214,7 @@ export function CaseStudyCard({
         !loading &&
         !catalogLoading && (
           <p className="provenance">
-            No case study loaded. Pick a catalog entry to align lightning, truth, and reference tracks
-            on a shared clock.
+            No case study loaded. Pick a catalog entry or import a licensed pack with attestation.
           </p>
         )
       )}
