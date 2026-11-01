@@ -6,7 +6,12 @@ import type {
   CaseStudyShelfListItem,
   LightningSyncMode,
 } from '../../weather'
-import { downloadCaseStudyTemplate, MAX_CASE_STUDY_SHELF } from '../../weather'
+import {
+  downloadCaseStudyFromShelf,
+  downloadCaseStudyPack,
+  downloadCaseStudyTemplate,
+  MAX_CASE_STUDY_SHELF,
+} from '../../weather'
 
 interface CaseStudyCardProps {
   caseStudy: CaseStudyPack | null
@@ -128,18 +133,31 @@ export function CaseStudyCard({
                       </span>
                       <span className="case-license">imported · attested</span>
                     </button>
-                    <button
-                      type="button"
-                      className="case-shelf-delete"
-                      disabled={disabled}
-                      aria-label={`Remove ${entry.title} from shelf`}
-                      onClick={() => {
-                        const result = onDeleteShelfId(entry.shelfId)
-                        setImportMessage(result.message)
-                      }}
-                    >
-                      Remove
-                    </button>
+                    <div className="case-shelf-actions">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        aria-label={`Export ${entry.title}`}
+                        onClick={() => {
+                          const result = downloadCaseStudyFromShelf(entry.shelfId)
+                          setImportMessage(result.message)
+                        }}
+                      >
+                        Export
+                      </button>
+                      <button
+                        type="button"
+                        className="case-shelf-delete"
+                        disabled={disabled}
+                        aria-label={`Remove ${entry.title} from shelf`}
+                        onClick={() => {
+                          const result = onDeleteShelfId(entry.shelfId)
+                          setImportMessage(result.message)
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                   <p className="provenance case-entry-note">
                     {entry.licenceNote}
@@ -265,14 +283,28 @@ export function CaseStudyCard({
             </div>
           </dl>
           {caseStudy.importAttestation && (
-            <p className="provenance">
-              <strong>Import attestation:</strong> {caseStudy.importAttestation.licenceNote}
-              {caseStudy.importAttestation.sourceFilename
-                ? ` · file ${caseStudy.importAttestation.sourceFilename}`
-                : ''}
-              {' · '}
-              {caseStudy.importAttestation.attestedAt}
-            </p>
+            <>
+              <p className="provenance">
+                <strong>Import attestation:</strong> {caseStudy.importAttestation.licenceNote}
+                {caseStudy.importAttestation.sourceFilename
+                  ? ` · file ${caseStudy.importAttestation.sourceFilename}`
+                  : ''}
+                {' · '}
+                {caseStudy.importAttestation.attestedAt}
+              </p>
+              <div className="verify-actions">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    const result = downloadCaseStudyPack(caseStudy)
+                    setImportMessage(result.message)
+                  }}
+                >
+                  Export attested JSON
+                </button>
+              </div>
+            </>
           )}
           <p className="provenance">
             <strong>Provenance:</strong> {caseStudy.provenance.summary}

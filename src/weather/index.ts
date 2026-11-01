@@ -83,6 +83,9 @@ export {
   deleteCaseStudyFromShelf,
   clearCaseStudyShelf,
   packToCaseStudyDocument,
+  caseStudyPackToExportJson,
+  downloadCaseStudyPack,
+  downloadCaseStudyFromShelf,
   type CaseStudyShelfEntry,
   type CaseStudyShelfListItem,
 } from './caseStudy/importShelf'

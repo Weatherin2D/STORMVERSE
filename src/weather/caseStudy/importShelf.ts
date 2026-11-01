@@ -290,3 +290,67 @@ export function clearCaseStudyShelf(): void {
   if (!canUseStorage()) return
   window.localStorage.removeItem(CASE_STUDY_SHELF_KEY)
 }
+
+function safeFilenamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'case-study'
+}
+
+/** Pretty-printed JSON for an attested pack (includes importAttestation). */
+export function caseStudyPackToExportJson(pack: CaseStudyPack): string {
+  if (!pack.importAttestation?.attestedByUser) {
+    throw new Error('Only attested imports can be exported with attestation metadata')
+  }
+  return `${JSON.stringify(packToCaseStudyDocument(pack), null, 2)}\n`
+}
+
+export function downloadCaseStudyPack(
+  pack: CaseStudyPack,
+  filename?: string,
+): { ok: boolean; message: string } {
+  try {
+    const payload = caseStudyPackToExportJson(pack)
+    const name =
+      filename ??
+      `stormverse-${safeFilenamePart(pack.id)}-attested.json`
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(url)
+    return { ok: true, message: `Exported “${pack.title}” with attestation metadata` }
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : 'Case study export failed',
+    }
+  }
+}
+
+export function downloadCaseStudyFromShelf(
+  shelfId: string,
+  filename?: string,
+): { ok: boolean; message: string } {
+  const pack = loadCaseStudyFromShelf(shelfId)
+  if (!pack) {
+    return { ok: false, message: 'Shelved case study not found or invalid' }
+  }
+  const entry = listCaseStudyShelf().find((e) => e.shelfId === shelfId)
+  const suggested =
+    filename ??
+    `stormverse-${safeFilenamePart(pack.id)}-attested.json`
+  const result = downloadCaseStudyPack(pack, suggested)
+  if (result.ok && entry?.sourceFilename) {
+    return {
+      ok: true,
+      message: `${result.message} (from ${entry.sourceFilename})`,
+    }
+  }
+  return result
+}

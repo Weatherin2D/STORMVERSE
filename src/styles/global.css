@@ -764,10 +764,18 @@ button {
   align-items: stretch;
 }
 
+.case-study-card .case-shelf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.case-study-card .case-shelf-actions button,
 .case-study-card .case-shelf-delete {
-  align-self: start;
+  align-self: stretch;
   padding: 8px 10px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .case-study-card .case-import {

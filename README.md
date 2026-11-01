@@ -41,7 +41,7 @@ Use **Export scene** / **Copy share link** / **Import scene** / **Save bookmark*
 
 ### Case-study import shelf
 
-Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShelf.v1`, max 12) and listed under **Local import shelf** in the case study library. Load or remove them without re-uploading. Device-local only.
+Attested user imports are auto-saved to `localStorage` (`stormverse.caseStudyShelf.v1`, max 12) and listed under **Local import shelf** in the case study library. Load, export, or remove them without re-uploading. Exports include attestation metadata. Device-local only.
 - Restore rematches cells by `stormId` against the live derived-track catalogue (radar is always re-fetched)
 
 ## Milestone status
@@ -122,11 +122,17 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 - Download an empty template pack; no scraping or fabricated archives
 - Import refused without attestation checkbox + non-empty licence note
 
-### 18 — Local attested-import shelf (current)
+### 18 — Local attested-import shelf
 - Successful attested imports auto-save to a device-local shelf (`localStorage`)
 - Reload shelved packs from the case-study library without re-uploading
 - Remove shelf entries; max 12 packs; clearing site data wipes the shelf
 - Still requires prior user attestation — no scraping or fabricated archives
+
+### 19 — Attested pack export (current)
+- Export shelved or loaded attested packs as STORMVERSE JSON
+- `importAttestation` (licence note, timestamp, source filename) preserved in the file
+- Catalog/example fixtures without attestation cannot use the attested export path
+- Re-import still requires a fresh rights attestation in the UI
 
 ## Scientific integrity
 
@@ -164,7 +170,7 @@ Heuristic coverage / continuity / speed / smoothness scores with non-verificatio
 
 1. Wire lightning + truth + case-study catalog entries to licensed commercial/BoM products when available
 2. Licensed radar volume / true RHI products under proper licensing
-3. Optional export of a shelved pack back to JSON with attestation metadata intact
+3. Optional shelf sync / backup beyond a single browser profile
 
 Do not scrape restricted services. Respect provider terms and licensing.
 
